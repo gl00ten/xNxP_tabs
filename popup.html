@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Tab Manager</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <h1>Tab Manager</h1>
+    <input type="text" id="search-input" placeholder="Search..." />
+    <table>
+      <thead>
+        <tr>
+          <th>Actions</th>
+          <th data-sort="firstOpened">First Opened</th>
+          <th data-sort="lastOpened">Last Opened</th>
+          <th data-sort="title">Title</th>
+          <th data-sort="url">URL</th>
+          <th data-sort="id">ID</th>
+          <th data-sort="windowId">Window ID</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+    <script src="popup.js"></script>
+  </body>
+</html>

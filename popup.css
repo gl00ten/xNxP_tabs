@@ -1,0 +1,86 @@
+/* Reset some default browser styles */
+html, body, h1, table {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+  width: 800px; /* Increase the width */
+  padding: 20px;
+}
+
+h1 {
+  font-size: 24px;
+  color: #333;
+  margin-bottom: 20px;
+  text-align: center; /* Center the title */
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px; /* Increase the font size */
+}
+
+thead {
+  background-color: #007BFF;
+}
+
+th {
+  padding: 8px;
+  font-size: 14px;
+  color: #ffffff;
+  text-align: left;
+  border-bottom: 1px solid #007BFF;
+}
+
+td {
+  padding: 8px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+}
+
+tr:nth-child(even) {
+  background-color: #f0f0f0;
+}
+
+
+/* Add the following to your existing popup.css */
+.action-button {
+  background-color: #007BFF;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 5px;
+  padding: 5px 10px;
+}
+
+.action-button:hover {
+  background-color: #0056b3;
+}
+
+/* Add the following to your existing popup.css */
+th[data-sort] {
+  cursor: pointer;
+}
+
+th[data-sort]:hover {
+  text-decoration: underline;
+}
+
+/* Add a style for the input search box */
+input#search-input {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 20px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
