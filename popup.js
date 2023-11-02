@@ -52,10 +52,9 @@ document.addEventListener("DOMContentLoaded", function () {
       switchButton.textContent = "Switch";
       switchButton.classList.add("action-button");
       switchButton.onclick = () => {
-        chrome.windows.update(tabInfo.windowId, { focused: true }, () => {
-          chrome.tabs.update(tabInfo.id, { active: true });
-        });
-        window.close();
+        chrome.windows.update(tabInfo.windowId, { focused: true });
+        chrome.tabs.update(tabInfo.id, { active: true });
+        //window.close();
       };
       actionsCell.appendChild(switchButton);
 

@@ -1,15 +1,4 @@
-// Initialize and load tabInfoList from storage
-chrome.storage.local.get("tabInfoList", function (result) {
-  let tabInfoList = result.tabInfoList || {};
-
-  // Remove inactive tabs and update tabInfoList with currently opened tabs
-  syncActiveTabs();
-
-  // Add event listeners
-  chrome.tabs.onUpdated.addListener(updateTabInfo);
-  chrome.tabs.onActivated.addListener(onTabActivated);
-  chrome.tabs.onRemoved.addListener(onTabRemoved);
-  chrome.runtime.onMessage.addListener(onMessageReceived);
+let tabInfoList = {}
 
   // Synchronize tabInfoList with active tabs
   function syncActiveTabs() {
@@ -114,10 +103,32 @@ chrome.storage.local.get("tabInfoList", function (result) {
     chrome.storage.local.set({ tabInfoList: tabInfoList });
   }
 
+  chrome.storage.local.get("tabInfoList", function (result) {
+    tabInfoList = result.tabInfoList || {};
+    syncActiveTabs();
+  });
+
   // Listener for messages from the popup
   function onMessageReceived(request, sender, sendResponse) {
     if (request === "getTabInfo") {
-      sendResponse(tabInfoList);
+      // Retrieve tabInfoList from local storage
+      chrome.storage.local.get("tabInfoList", function (result) {
+        tabInfoList = result.tabInfoList || {};
+        syncActiveTabs();
+        // Send the retrieved tabInfoList to the popup
+        sendResponse(tabInfoList);
+      });
+      // Return true to indicate that you will send a response asynchronously
+      return true;
     }
   }
-});
+
+  // Add event listeners
+  chrome.tabs.onUpdated.addListener(updateTabInfo);
+  chrome.tabs.onActivated.addListener(onTabActivated);
+  chrome.tabs.onRemoved.addListener(onTabRemoved);
+  chrome.runtime.onMessage.addListener(onMessageReceived);
+
+
+
+
