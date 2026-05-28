@@ -1,86 +1,354 @@
-/* Reset some default browser styles */
-html, body, h1, table {
-  margin: 0;
-  padding: 0;
-  border: none;
+:root {
+  --bg: #eef7ff;
+  --panel: #ffffff;
+
+  --blue: #148dff;
+  --blue-2: #0a6fe8;
+  --blue-3: #005fd1;
+  --blue-soft: #e8f4ff;
+  --cyan: #35c7ff;
+
+  --orange: #ff9f1c;
+  --orange-2: #ff8c00;
+  --orange-soft: #fff1d6;
+
+  --purple: #7c5cff;
+  --purple-soft: #a486ff;
+  --pink: #ff6fb1;
+
+  --text: #102033;
+  --muted: #4f6682;
+  --faint: #7f96b0;
+
+  --border: #bdd8f2;
+  --row: #f8fbff;
+  --row-alt: #edf6ff;
+  --row-hover: #fff1d6;
 }
+
+/* ---------- Base ---------- */
 
 body {
-  font-family: Arial, sans-serif;
-  background-color: #f5f5f5;
-  width: 800px; /* Increase the width */
-  padding: 10px;
+  width: 820px;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(255, 159, 28, 0.22), transparent 26%),
+    radial-gradient(circle at 94% 0%, rgba(20, 141, 255, 0.24), transparent 30%),
+    linear-gradient(135deg, #edf7ff 0%, #f7fbff 45%, #fff8ed 100%);
 }
+
+/* ---------- Header ---------- */
 
 h1 {
-  font-size: 24px;
-  color: #333;
-  margin-bottom: 20px;
-  text-align: center; /* Center the title */
+  margin: 0;
+  padding: 11px 14px 12px;
+  text-align: center;
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: white;
+  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
+  border-bottom: 3px solid var(--orange);
+  text-shadow: 0 2px 4px rgba(0, 40, 90, 0.26);
 }
 
+/* ---------- Search ---------- */
+
+.toolbar {
+  width: calc(100% - 20px);
+  box-sizing: border-box;
+  margin: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#search-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 2px solid #b8d9f6;
+  border-radius: 13px;
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+  background: white;
+  box-shadow: 0 3px 10px rgba(20, 141, 255, 0.11);
+}
+
+#search-input::placeholder {
+  color: var(--faint);
+}
+
+#search-input:focus {
+  border-color: var(--orange);
+  box-shadow:
+    0 0 0 3px rgba(255, 159, 28, 0.18),
+    0 4px 14px rgba(20, 141, 255, 0.14);
+}
+
+#audio-filter-button {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 11px;
+  border: none;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #7c5cff, #a486ff);
+  color: white;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 850;
+  box-shadow: 0 3px 9px rgba(124, 92, 255, 0.22);
+}
+
+#audio-filter-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #148dff, #35c7ff);
+  box-shadow: 0 4px 11px rgba(20, 141, 255, 0.24);
+}
+
+#audio-filter-button.active {
+  background: linear-gradient(135deg, #ff8c00, #ffb347);
+  box-shadow: 0 4px 11px rgba(255, 159, 28, 0.3);
+}
+
+#audio-filter-button:active {
+  transform: translateY(0);
+}
+
+/* ---------- Table ---------- */
+
 table {
+  width: calc(100% - 20px);
+  margin: 0 10px 10px;
+  table-layout: fixed;
   border-collapse: collapse;
-  width: 100%;
-  font-size: 14px; /* Increase the font size */
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow:
+    0 8px 22px rgba(37, 83, 120, 0.14),
+    0 2px 7px rgba(20, 141, 255, 0.08);
 }
 
 thead {
-  background-color: #007BFF;
+  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 55%, #ffb347 100%);
 }
 
 th {
-  padding: 8px;
-  font-size: 14px;
-  color: #ffffff;
+  padding: 7px 5px;
   text-align: left;
-  border-bottom: 1px solid #007BFF;
-}
-
-td {
-  padding: 8px;
-  font-size: 14px;
-  color: #333;
-  border-bottom: 1px solid #eee;
-}
-
-tr:nth-child(even) {
-  background-color: #f0f0f0;
-}
-
-
-/* Add the following to your existing popup.css */
-.action-button {
-  background-color: #007BFF;
-  border: none;
-  border-radius: 4px;
+  vertical-align: middle;
+  font-size: 10.5px;
+  font-weight: 900;
   color: white;
-  cursor: pointer;
-  font-size: 12px;
-  margin-right: 5px;
-  padding: 5px 10px;
+  user-select: none;
+  line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(0, 50, 100, 0.28);
 }
 
-.action-button:hover {
-  background-color: #0056b3;
-}
-
-/* Add the following to your existing popup.css */
 th[data-sort] {
   cursor: pointer;
 }
 
 th[data-sort]:hover {
-  text-decoration: underline;
+  background: rgba(255, 255, 255, 0.22);
 }
 
-/* Add a style for the input search box */
-input#search-input {
-  display: block;
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 20px;
-  font-size: 16px;
-  border: 1px solid #ccc;
+td {
+  padding: 5px 5px;
+  border-bottom: 1px solid #d9ebfb;
+  vertical-align: middle;
+  font-size: 12.5px;
+}
+
+tbody tr:nth-child(odd) {
+  background: var(--row);
+}
+
+tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
+
+tbody tr:hover td {
+  background: var(--row-hover);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- Column widths: 6-column layout ---------- */
+
+/* Actions */
+th:nth-child(1),
+td:nth-child(1) {
+  width: 96px;
+}
+
+/* First Opened */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 92px;
+}
+
+/* Last Opened */
+th:nth-child(3),
+td:nth-child(3) {
+  width: 92px;
+}
+
+/* Tab / URL */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 500px;
+}
+
+/* ID */
+th:nth-child(5),
+td:nth-child(5) {
+  width: 38px;
+  text-align: center;
+}
+
+/* Win */
+th:nth-child(6),
+td:nth-child(6) {
+  width: 40px;
+  text-align: center;
+}
+
+/* ---------- Dates ---------- */
+
+td:nth-child(2),
+td:nth-child(3) {
+  color: #183c5f;
+  font-size: 11.5px;
+  font-weight: 850;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Main tab cell ---------- */
+
+.tab-cell {
+  overflow: hidden;
+}
+
+.tab-title {
+  color: #102033;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.18;
+  overflow: hidden;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.tab-favicon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 0;
   border-radius: 4px;
 }
+
+.tab-title span {
+  min-width: 0;
+  overflow: hidden;
+
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.tab-url-inline {
+  margin-top: 2px;
+  padding-left: 23px;
+  color: #1768ad;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  opacity: 0.92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- ID / Window columns ---------- */
+
+td:nth-child(5),
+td:nth-child(6) {
+  color: #d87800;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* ---------- Buttons ---------- */
+
+.action-button {
+  display: inline-block;
+  width: auto;
+  min-width: 42px;
+  margin: 1px 2px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue-2), var(--blue));
+  color: white;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 850;
+  box-shadow: 0 2px 7px rgba(20, 141, 255, 0.24);
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--orange-2), #ffb347);
+  box-shadow: 0 3px 9px rgba(255, 159, 28, 0.3);
+}
+
+.action-button:active {
+  transform: translateY(0);
+}
+
+.action-button:nth-child(2) {
+  background: linear-gradient(135deg, var(--purple), var(--purple-soft));
+}
+
+.action-button:nth-child(2):hover {
+  background: linear-gradient(135deg, #ff6b35, var(--orange));
+}
+
+/* ---------- Sort arrow ---------- */
+
+.sort-indicator {
+  display: inline-block;
+  width: 9px;
+  margin-left: 2px;
+  font-size: 9px;
+  color: #fff4cc;
+}
+
+.audio-indicator {
+  color: #ff8c00;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+

@@ -1,26 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
-    <title>Tab Manager</title>
-    <link rel="stylesheet" href="popup.css">
+    <meta charset="utf-8" />
+    <title>xNxP Tabs</title>
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>Tab Manager</h1>
-    <input type="text" id="search-input" placeholder="Search..." />
+    <h1>xNxP Tabs</h1>
+
+    <div class="toolbar">
+      <input
+        id="search-input"
+        type="search"
+        placeholder="Search tabs..."
+        autocomplete="off"
+      />
+
+      <button id="audio-filter-button" type="button" title="Show only tabs playing audio">
+        ♪ Audio
+      </button>
+    </div>
+
     <table>
       <thead>
         <tr>
           <th>Actions</th>
-          <th data-sort="firstOpened">First Opened</th>
-          <th data-sort="lastOpened">Last Opened</th>
-          <th data-sort="title">Title</th>
-          <th data-sort="url">URL</th>
-          <th data-sort="id">ID</th>
-          <th data-sort="windowId">Window ID</th>
+          <th data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
+          <th data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
+          <th data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
+          <th data-sort="id">ID <span class="sort-indicator"></span></th>
+          <th data-sort="windowId">Win <span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody id="table-body"></tbody>
     </table>
+
     <script src="popup.js"></script>
   </body>
 </html>
