@@ -97,33 +97,38 @@ h1 {
     0 4px 14px rgba(20, 141, 255, 0.14);
 }
 
-#audio-filter-button {
-  flex: 0 0 auto;
-  height: 36px;
-  padding: 0 11px;
-  border: none;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #7c5cff, #a486ff);
-  color: white;
+.audio-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #183c5f;
+  background: #f0f6ff;
+  border: 1px solid #b8d9f6;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 850;
-  box-shadow: 0 3px 9px rgba(124, 92, 255, 0.22);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-#audio-filter-button:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(135deg, #148dff, #35c7ff);
-  box-shadow: 0 4px 11px rgba(20, 141, 255, 0.24);
+.audio-filter:hover {
+  background: #e8f0ff;
+  border-color: #148dff;
 }
 
-#audio-filter-button.active {
-  background: linear-gradient(135deg, #ff8c00, #ffb347);
-  box-shadow: 0 4px 11px rgba(255, 159, 28, 0.3);
+.audio-filter input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #ff8c00;
+  cursor: pointer;
 }
 
-#audio-filter-button:active {
-  transform: translateY(0);
+.audio-filter input[type="checkbox"]:checked + span {
+  color: #c45c00;
+  font-weight: 700;
 }
 
 /* ---------- Table ---------- */
@@ -181,8 +186,26 @@ tbody tr:nth-child(even) {
   background: var(--row-alt);
 }
 
+tbody tr {
+  cursor: pointer;
+}
+
 tbody tr:hover td {
   background: var(--row-hover);
+}
+
+/* Age visualization - older = warmer tint (more neglected) */
+tbody tr.age-recent {
+  background: #fffaf5;
+}
+tbody tr.age-today {
+  background: #fff4e8;
+}
+tbody tr.age-old {
+  background: #ffe9d1;
+}
+tbody tr.age-very-old {
+  background: #ffd9b3;
 }
 
 tbody tr:last-child td {

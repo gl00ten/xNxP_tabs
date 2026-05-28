@@ -16,9 +16,10 @@
         autocomplete="off"
       />
 
-      <button id="audio-filter-button" type="button" title="Show only tabs playing audio">
-        ♪ Audio
-      </button>
+      <label class="audio-filter" title="Show only tabs playing audio">
+        <input type="checkbox" id="audio-filter-checkbox">
+        <span>Playing audio</span>
+      </label>
     </div>
 
     <table>
@@ -35,6 +36,7 @@
       <tbody id="table-body"></tbody>
     </table>
 
+    <script src="browser-polyfill.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

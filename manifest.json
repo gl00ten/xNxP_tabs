@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "xNxP Tabs",
   "version": "1.0",
-  "description": "Tab manager for Firefox. Shows first opened and last active time for each tab.",
+  "description": "Tab manager. Shows first opened and last active time for each tab.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -14,9 +14,9 @@
     "default_popup": "popup.html"
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["browser-polyfill.js", "background.js"]
   },
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
       "id": "xnxp-tabs@gl00ten.net"
     }
