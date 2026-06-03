@@ -22,3 +22,4 @@ Tab manager extension (ADHD-friendly) showing first opened + last active time.
 
 - The extension uses the `webextension-polyfill` so we can use the modern `browser.*` APIs in both Firefox and Chrome.
 - Manifest V2 is used for maximum compatibility right now.
+- Large design source files (`ori_icon*.png`) are intentionally ignored via `.gitignore`.

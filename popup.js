@@ -38,13 +38,12 @@ document.addEventListener("DOMContentLoaded", function () {
   const tableHeaders = document.querySelectorAll("th[data-sort]");
   const audioFilterCheckbox = document.getElementById("audio-filter-checkbox");
 
-  searchInput.focus();
-
   let tabInfoList = {};
   let filteredTabEntries = [];
   let sortField = null;
   let sortOrder = 1;
   let showOnlyAudible = false;
+  let personalBest = 0;
 
   // Restore previous search + audio filter + sort state
   (async () => {
@@ -67,11 +66,23 @@ document.addEventListener("DOMContentLoaded", function () {
       sortOrder = result.popupSortOrder || 1;
     }
 
+    // Load personal best
+    const bestResult = await browser.storage.local.get("personalBest");
+    personalBest = bestResult.personalBest || 0;
+    updatePersonalBestDisplay();
+
     const responseTabInfoList = await browser.runtime.sendMessage("getTabInfo");
     tabInfoList = responseTabInfoList || {};
+
+    checkForNewPersonalBest();
+
     applyFilters();
     renderTable();
     updateSortIndicators();
+
+    // Focus and select the search input so the user can immediately replace previous text by typing
+    searchInput.focus();
+    searchInput.select();
   })();
 
   let searchDebounceTimer;
@@ -146,13 +157,20 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsCell.appendChild(closeButton);
     row.appendChild(actionsCell);
 
-    // Date cells
-    renderTableCell(row, formatShortDate(tabInfo.firstOpenedTs, tabInfo.firstOpened || ""));
-    renderTableCell(row, formatShortDate(tabInfo.lastOpenedTs, tabInfo.lastOpened || ""));
+    // Date cells (Last Opened first)
+    const lastDate = document.createElement("td");
+    lastDate.classList.add("col-date");
+    lastDate.textContent = formatShortDate(tabInfo.lastOpenedTs, tabInfo.lastOpened || "");
+    row.appendChild(lastDate);
+
+    const firstDate = document.createElement("td");
+    firstDate.classList.add("col-date");
+    firstDate.textContent = formatShortDate(tabInfo.firstOpenedTs, tabInfo.firstOpened || "");
+    row.appendChild(firstDate);
 
     // Tab info cell
     const tabCell = document.createElement("td");
-    tabCell.classList.add("tab-cell");
+    tabCell.classList.add("col-tab", "tab-cell");
 
     const titleDiv = document.createElement("div");
     titleDiv.classList.add("tab-title");
@@ -185,27 +203,37 @@ document.addEventListener("DOMContentLoaded", function () {
     tabCell.appendChild(urlDiv);
     row.appendChild(tabCell);
 
-    // ID and Window ID
-    renderTableCell(row, tabInfo.id || "");
-    renderTableCell(row, tabInfo.windowId || "");
-
     return row;
   }
 
   async function switchToTab(tabInfo) {
     try {
       await browser.tabs.update(tabInfo.id, { active: true });
-      await browser.windows.update(tabInfo.windowId, {
-        focused: true,
-        state: "normal",
-      });
+      await browser.windows.update(tabInfo.windowId, { focused: true });
       window.close();
     } catch (err) {
-      // Tab or window may no longer exist
+      console.error("Failed to switch to tab:", err);
     }
   }
 
   function renderTable() {
+    const countEl = document.getElementById('visible-tab-count');
+    if (countEl) {
+      const newCount = filteredTabEntries.length;
+      if (countEl.textContent != newCount) {
+        // Fun pop animation
+        countEl.style.transition = 'none';
+        countEl.style.transform = 'scale(1.4)';
+        
+        // Force reflow
+        void countEl.offsetWidth;
+        
+        countEl.textContent = newCount;
+        countEl.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        countEl.style.transform = 'scale(1)';
+      }
+    }
+
     tableBody.innerHTML = "";
 
     const fragment = document.createDocumentFragment();
@@ -288,5 +316,62 @@ document.addEventListener("DOMContentLoaded", function () {
         indicator.textContent = "";
       }
     });
+  }
+
+  function updatePersonalBestDisplay() {
+    const bestContainer = document.getElementById("personal-best");
+    const bestNumber = document.getElementById("personal-best-number");
+
+    if (!bestContainer || !bestNumber) return;
+
+    if (personalBest > 0) {
+      bestNumber.textContent = personalBest;
+      bestContainer.style.display = "flex";
+    } else {
+      bestContainer.style.display = "none";
+    }
+  }
+
+  function checkForNewPersonalBest() {
+    const currentTotal = Object.keys(tabInfoList).length;
+
+    if (currentTotal > personalBest) {
+      const oldBest = personalBest;
+      personalBest = currentTotal;
+
+      browser.storage.local.set({ personalBest: personalBest });
+
+      updatePersonalBestDisplay();
+      showNewRecordCelebration(currentTotal, oldBest);
+    }
+  }
+
+  function showNewRecordCelebration(newBest, oldBest) {
+    const bestContainer = document.getElementById("personal-best");
+    if (!bestContainer) return;
+
+    const originalText = bestContainer.innerHTML;
+
+    bestContainer.innerHTML = `
+      <span class="label" style="color:#ff6b00; font-weight:800;">New record!</span>
+      <span class="number" style="color:#ff6b00;">${newBest}</span>
+      <span class="fire">🔥</span>
+    `;
+
+    // Pop animation on the container
+    bestContainer.style.transition = "transform 0.2s ease";
+    bestContainer.style.transform = "scale(1.15)";
+
+    setTimeout(() => {
+      bestContainer.style.transform = "scale(1)";
+    }, 150);
+
+    // Revert after a few seconds
+    setTimeout(() => {
+      if (bestContainer) {
+        bestContainer.innerHTML = originalText;
+        updatePersonalBestDisplay();
+      }
+    }, 4200);
   }
 });

@@ -6,16 +6,28 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>xNxP Tabs</h1>
-
-    <div class="toolbar">
+    <div class="header">
+      <div class="brand">
+        <span class="brand-text">xNxP Tabs</span>
+        <img src="icons/icon128.png" alt="" class="brand-icon">
+      </div>
       <input
         id="search-input"
         type="search"
         placeholder="Search tabs..."
         autocomplete="off"
       />
-
+      <div class="tab-count">
+        <div class="current">
+          <span class="count" id="visible-tab-count">0</span>
+          <span class="label">tabs</span>
+        </div>
+        <div class="personal-best" id="personal-best" style="display: none;">
+          <span class="label">Best:</span>
+          <span class="number" id="personal-best-number">0</span>
+          <span class="fire">🔥</span>
+        </div>
+      </div>
       <label class="audio-filter" title="Show only tabs playing audio">
         <input type="checkbox" id="audio-filter-checkbox">
         <span>Playing audio</span>
@@ -25,12 +37,10 @@
     <table>
       <thead>
         <tr>
-          <th>Actions</th>
-          <th data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
-          <th data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
-          <th data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
-          <th data-sort="id">ID <span class="sort-indicator"></span></th>
-          <th data-sort="windowId">Win <span class="sort-indicator"></span></th>
+          <th class="col-actions">Actions</th>
+          <th class="col-date" data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
+          <th class="col-date" data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
+          <th class="col-tab" data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody id="table-body"></tbody>

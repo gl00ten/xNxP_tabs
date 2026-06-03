@@ -9,6 +9,21 @@ function generateRestoreKey(tab) {
   return tab.url || "";
 }
 
+// One-time migration helper for legacy records saved before we added *Ts fields.
+function backfillTimestamps(list) {
+  for (const key in list) {
+    const r = list[key];
+    if (r.firstOpened && !r.firstOpenedTs) {
+      const p = Date.parse(r.firstOpened);
+      r.firstOpenedTs = Number.isNaN(p) ? Date.now() : p;
+    }
+    if (r.lastOpened && !r.lastOpenedTs) {
+      const p = Date.parse(r.lastOpened);
+      r.lastOpenedTs = Number.isNaN(p) ? Date.now() : p;
+    }
+  }
+}
+
 function nowString() {
   return new Date().toLocaleString();
 }
@@ -101,7 +116,18 @@ async function syncActiveTabs() {
     let restoredRecord = null;
 
     if (oldRecordsByRestoreKey[restoreKey]?.length > 0) {
-      restoredRecord = oldRecordsByRestoreKey[restoreKey].shift();
+      // When multiple historical records exist for the same URL (very common),
+      // pick the one with the oldest firstOpened time. This makes assignment
+      // deterministic and biases toward preserving the true earliest time.
+      const candidates = oldRecordsByRestoreKey[restoreKey];
+      restoredRecord = candidates.reduce((best, current) => {
+        const bestTs = best.firstOpenedTs || Infinity;
+        const curTs = current.firstOpenedTs || Infinity;
+        return curTs < bestTs ? current : best;
+      });
+      // Remove the chosen one from the pool
+      const idx = candidates.indexOf(restoredRecord);
+      if (idx > -1) candidates.splice(idx, 1);
     }
 
     const previousRecord = existingByTabId || restoredRecord;
@@ -161,7 +187,7 @@ async function onTabActivated(activeInfo) {
 }
 
 // Listener for onRemoved event
-async function onTabRemoved(tabId) {
+async function onTabRemoved(tabId /*, removeInfo */) {
   const tabKey = generateTabKey(tabId);
 
   if (tabInfoList[tabKey]) {
@@ -194,7 +220,8 @@ async function onTabCreated(tab) {
     url !== "" &&
     !url.startsWith("about:") &&
     !url.startsWith("chrome://newtab") &&
-    !url.startsWith("edge://newtab");
+    !url.startsWith("edge://newtab") &&
+    !url.startsWith("chrome://new-tab-page");
 
   if (isLikelyRestoredTab) {
     return; // Let syncActiveTabs + updateTabInfo's URL recovery handle it
@@ -211,11 +238,22 @@ async function onTabCreated(tab) {
   await browser.storage.local.set({ tabInfoList: tabInfoList });
 }
 
+// Register listeners as early as possible so we don't miss events
+// during startup / session restore (especially onCreated for restored tabs).
+browser.tabs.onCreated.addListener(onTabCreated);
+browser.tabs.onUpdated.addListener(updateTabInfo);
+browser.tabs.onActivated.addListener(onTabActivated);
+browser.tabs.onRemoved.addListener(onTabRemoved);
+browser.runtime.onMessage.addListener(onMessageReceived);
+
 // Load stored data, then sync with open tabs
 (async () => {
   try {
     const result = await browser.storage.local.get("tabInfoList");
     tabInfoList = result.tabInfoList || {};
+
+    backfillTimestamps(tabInfoList);
+
     await syncActiveTabs();
   } catch (err) {
     console.error("Background initial load failed:", err);
@@ -224,27 +262,23 @@ async function onTabCreated(tab) {
 
 // Listener for messages from the popup
 function onMessageReceived(request, sender, sendResponse) {
+  // Legacy string message
   if (request === "getTabInfo") {
     (async () => {
       const result = await browser.storage.local.get("tabInfoList");
       tabInfoList = result.tabInfoList || {};
 
+      backfillTimestamps(tabInfoList);
+
       await syncActiveTabs();
       sendResponse(tabInfoList);
     })();
-
-    return true; // Keep the message channel open for async response
+    return true;
   }
+
+  sendResponse({ error: "Unknown request" });
+  return false;
 }
 
-// Add event listeners
-//
-// Tab data can enter the system through three paths:
-// 1. onCreated        → fresh tabs created during this session (best for "firstOpened")
-// 2. onUpdated        → enriches records + catches restored tabs via URL recovery
-// 3. syncActiveTabs() → full resync at startup + when popup requests data (handles session restore)
-browser.tabs.onCreated.addListener(onTabCreated);
-browser.tabs.onUpdated.addListener(updateTabInfo);
-browser.tabs.onActivated.addListener(onTabActivated);
-browser.tabs.onRemoved.addListener(onTabRemoved);
-browser.runtime.onMessage.addListener(onMessageReceived);
+// Listeners are registered early (before the async init) so we catch
+// onCreated events for tabs being restored by the browser.

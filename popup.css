@@ -24,15 +24,22 @@
   --row: #f8fbff;
   --row-alt: #edf6ff;
   --row-hover: #fff1d6;
+
+  /* UI spacing - simplified */
+  --space-xs: 4px;
+  --space-s: 6px;
+  --space-m: 8px;
+  --space-l: 12px;
 }
 
 /* ---------- Base ---------- */
 
 body {
-  width: 820px;
+  width: 800px; /* more realistic for extension popups — browsers often cap around here */
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  box-sizing: border-box;
   font-family:
     system-ui,
     -apple-system,
@@ -48,42 +55,110 @@ body {
 
 /* ---------- Header ---------- */
 
-h1 {
-  margin: 0;
-  padding: 11px 14px 12px;
-  text-align: center;
-  font-size: 23px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  color: white;
-  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
-  border-bottom: 3px solid var(--orange);
-  text-shadow: 0 2px 4px rgba(0, 40, 90, 0.26);
-}
-
-/* ---------- Search ---------- */
-
-.toolbar {
-  width: calc(100% - 20px);
-  box-sizing: border-box;
-  margin: 10px;
+.header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
+  border-bottom: 3px solid var(--orange);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.brand-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.tab-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  color: #183c5f;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.tab-count .current {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tab-count .count {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--orange-2);
+  line-height: 1;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  display: inline-block;
+}
+
+.tab-count .label {
+  font-weight: 600;
+  opacity: 0.85;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tab-count .personal-best {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  color: #c45c00;
+  font-weight: 700;
+}
+
+.tab-count .personal-best .number {
+  font-weight: 800;
+  color: #ff6b00;
+}
+
+.tab-count .personal-best .fire {
+  font-size: 10px;
 }
 
 #search-input {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: 9px 12px;
+  padding: 8px 8px;
   border: 2px solid #b8d9f6;
-  border-radius: 13px;
+  border-radius: 12px;
   outline: none;
   font-size: 14px;
   color: var(--text);
   background: white;
-  box-shadow: 0 3px 10px rgba(20, 141, 255, 0.11);
 }
 
 #search-input::placeholder {
@@ -92,38 +167,30 @@ h1 {
 
 #search-input:focus {
   border-color: var(--orange);
-  box-shadow:
-    0 0 0 3px rgba(255, 159, 28, 0.18),
-    0 4px 14px rgba(20, 141, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.18);
 }
 
 .audio-filter {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  height: 32px;
-  font-size: 12px;
+  gap: 4px;
+  padding: 0 6px;
+  height: 30px;
+  font-size: 10px;
   font-weight: 600;
   color: #183c5f;
   background: #f0f6ff;
   border: 1px solid #b8d9f6;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.audio-filter:hover {
-  background: #e8f0ff;
-  border-color: #148dff;
-}
-
 .audio-filter input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   accent-color: #ff8c00;
-  cursor: pointer;
 }
 
 .audio-filter input[type="checkbox"]:checked + span {
@@ -134,48 +201,31 @@ h1 {
 /* ---------- Table ---------- */
 
 table {
-  width: calc(100% - 20px);
-  margin: 0 10px 10px;
+  width: 100%;
+  margin: var(--space-l) var(--space-m);
   table-layout: fixed;
   border-collapse: collapse;
-  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
-  box-shadow:
-    0 8px 22px rgba(37, 83, 120, 0.14),
-    0 2px 7px rgba(20, 141, 255, 0.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
-thead {
-  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 55%, #ffb347 100%);
+thead { background: linear-gradient(90deg, #0a6fe8 0%, #148dff 55%, #ffb347 100%); }
+
+th, td {
+  padding: 6px 5px;
+  vertical-align: middle;
+  font-size: 12px;
 }
 
 th {
-  padding: 7px 5px;
-  text-align: left;
-  vertical-align: middle;
-  font-size: 10.5px;
-  font-weight: 900;
   color: white;
-  user-select: none;
-  line-height: 1.05;
-  text-shadow: 0 1px 2px rgba(0, 50, 100, 0.28);
-}
-
-th[data-sort] {
-  cursor: pointer;
-}
-
-th[data-sort]:hover {
-  background: rgba(255, 255, 255, 0.22);
-}
-
-td {
-  padding: 5px 5px;
-  border-bottom: 1px solid #d9ebfb;
-  vertical-align: middle;
-  font-size: 12.5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 4px rgba(0, 0, 0, 0.45);
 }
 
 tbody tr:nth-child(odd) {
@@ -212,114 +262,62 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
-/* ---------- Column widths: 6-column layout ---------- */
+/* ---------- Column widths (using classes for maintainability) ---------- */
 
-/* Actions */
-th:nth-child(1),
-td:nth-child(1) {
-  width: 96px;
+.col-actions { width: 78px; }
+.col-date    { width: 76px; }
+
+.col-tab {
+  max-width: 420px;
+  overflow: hidden;
 }
 
-/* First Opened */
-th:nth-child(2),
-td:nth-child(2) {
-  width: 92px;
-}
-
-/* Last Opened */
-th:nth-child(3),
-td:nth-child(3) {
-  width: 92px;
-}
-
-/* Tab / URL */
-th:nth-child(4),
-td:nth-child(4) {
-  width: 500px;
-}
-
-/* ID */
-th:nth-child(5),
-td:nth-child(5) {
-  width: 38px;
-  text-align: center;
-}
-
-/* Win */
-th:nth-child(6),
-td:nth-child(6) {
-  width: 40px;
-  text-align: center;
-}
-
-/* ---------- Dates ---------- */
-
-td:nth-child(2),
-td:nth-child(3) {
+/* Dates - body cells */
+.col-date {
   color: #183c5f;
-  font-size: 11.5px;
-  font-weight: 850;
-  line-height: 1.05;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
-/* ---------- Main tab cell ---------- */
+/* Date column headers - make them white with strong black shadow for visibility */
+th.col-date {
+  color: white;
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 4px rgba(0, 0, 0, 0.45);
+  font-weight: 700;
+}
+
+/* ---------- Main tab cell (now column 4) ---------- */
 
 .tab-cell {
   overflow: hidden;
+  min-width: 0; /* helps with flex-like shrinking inside table cells */
 }
 
 .tab-title {
-  color: #102033;
-  font-size: 13px;
-  font-weight: 850;
-  line-height: 1.18;
-  overflow: hidden;
-
   display: flex;
-  align-items: flex-start;
-  gap: 7px;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .tab-favicon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  margin-top: 0;
-  border-radius: 4px;
-}
-
-.tab-title span {
-  min-width: 0;
-  overflow: hidden;
-
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .tab-url-inline {
-  margin-top: 2px;
-  padding-left: 23px;
+  font-size: 9.5px;
   color: #1768ad;
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 1.1;
-  opacity: 0.92;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- ID / Window columns ---------- */
-
-td:nth-child(5),
-td:nth-child(6) {
-  color: #d87800;
-  font-size: 11px;
-  font-weight: 900;
+  padding-left: 18px;
 }
 
 /* ---------- Buttons ---------- */
@@ -328,7 +326,7 @@ td:nth-child(6) {
   display: inline-block;
   width: auto;
   min-width: 42px;
-  margin: 1px 2px;
+  margin: 1px 1px; /* tighter horizontal spacing next to date columns */
   padding: 4px 6px;
   border: none;
   border-radius: 8px;
