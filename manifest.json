@@ -25,7 +25,8 @@
     }
   },
   "background": {
-    "scripts": ["browser-polyfill.js", "background.js"]
+    "scripts": ["browser-polyfill.js", "background.js"],
+    "persistent": false
   },
   "browser_specific_settings": {
     "gecko": {

@@ -282,7 +282,10 @@ document.addEventListener("DOMContentLoaded", function () {
     // === DEBUG (uncomment to see the actual numbers while the popup is open) ===
     // console.log('Age scale this render - minTs:', minTs, 'maxTs:', maxTs, 'rangeHours:', (maxTs-minTs)/3600000);
 
-    tableBody.innerHTML = "";
+    // Safe clear (avoids any innerHTML usage/warnings)
+    while (tableBody.firstChild) {
+      tableBody.removeChild(tableBody.firstChild);
+    }
 
     const fragment = document.createDocumentFragment();
     filteredTabEntries.forEach(([tabKey, tabInfo]) => {
@@ -403,13 +406,33 @@ document.addEventListener("DOMContentLoaded", function () {
     const bestContainer = document.getElementById("personal-best");
     if (!bestContainer) return;
 
-    const originalText = bestContainer.innerHTML;
+    // Clear existing content safely using DOM methods (avoids innerHTML warnings)
+    while (bestContainer.firstChild) {
+      bestContainer.removeChild(bestContainer.firstChild);
+    }
 
-    bestContainer.innerHTML = `
-      <span class="label" style="color:#ff6b00; font-weight:800;">New record!</span>
-      <span class="number" style="color:#ff6b00;">${newBest}</span>
-      <span class="fire">🔥</span>
-    `;
+    // Build the "New record!" message with createElement + textContent for safety
+    const label = document.createElement("span");
+    label.classList.add("label");
+    label.style.color = "#ff6b00";
+    label.style.fontWeight = "800";
+    label.textContent = "New record!";
+
+    const num = document.createElement("span");
+    num.classList.add("number");
+    num.style.color = "#ff6b00";
+    num.textContent = newBest;
+
+    const fire = document.createElement("span");
+    fire.classList.add("fire");
+    fire.textContent = "🔥";
+
+    bestContainer.appendChild(label);
+    bestContainer.appendChild(num);
+    bestContainer.appendChild(fire);
+
+    // Make sure the container is visible during the celebration
+    bestContainer.style.display = "flex";
 
     // Pop animation on the container - gentler scale + slower timing
     // so the "brag moment" feels nice and friendly, not rushed.
@@ -420,10 +443,13 @@ document.addEventListener("DOMContentLoaded", function () {
       bestContainer.style.transform = "scale(1)";
     }, 220);
 
-    // Revert after 5 seconds (gives people time to see + screenshot for bragging)
+    // Revert after 5 seconds (gives people time to see + screenshot for bragging).
+    // Clear and let updatePersonalBestDisplay() safely rebuild the normal "Best: N 🔥" content.
     setTimeout(() => {
       if (bestContainer) {
-        bestContainer.innerHTML = originalText;
+        while (bestContainer.firstChild) {
+          bestContainer.removeChild(bestContainer.firstChild);
+        }
         updatePersonalBestDisplay();
       }
     }, 5000);
