@@ -2,6 +2,18 @@
 
 Tab manager extension (ADHD-friendly) showing first opened + last active time.
 
+## Usage
+
+Open the popup by clicking the toolbar icon or with the keyboard shortcut.
+
+- Default: **Ctrl+Shift+U** (Windows/Linux) or **Cmd+Shift+U** (Mac)
+- Search is automatically focused and selected when it opens.
+
+Customize the shortcut in your browser:
+
+- **Chrome/Edge**: `chrome://extensions/shortcuts`
+- **Firefox**: `about:addons` → click the extension → Manage Extension Shortcuts
+
 ## Loading the Extension
 
 ### Firefox

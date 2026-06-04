@@ -1,22 +1,42 @@
-let maxTextLength = 200;
+function getAgeBackground(timestamp, minTs, maxTs) {
+  if (!timestamp || !isFinite(minTs) || !isFinite(maxTs) || minTs >= maxTs) return null;
 
-function renderTableCell(row, content) {
-  const cell = document.createElement("td");
-  cell.textContent = content;
-  row.appendChild(cell);
-}
+  // === THE SCALE (this is the key part) ===
+  // minTs = the OLDEST last-opened timestamp among your CURRENTLY open tabs
+  // maxTs = the MOST RECENT last-opened timestamp among your CURRENTLY open tabs
+  //
+  // For any tab we compute a normalized position t:
+  //   t = 0  → this is your most recently used tab right now  → coolest color
+  //   t = 1  → this is your least recently used tab right now  → warmest color
+  //
+  // Example: suppose right now you have tabs with these lastOpenedTs values:
+  //   Tab A (most recent): 1000
+  //   Tab B:                850
+  //   Tab C (oldest):       600
+  //
+  // Then minTs=600, maxTs=1000
+  //
+  // For Tab B: t = (1000 - 850) / (1000 - 600) = 150 / 400 = 0.375
+  //
+  // The formula (maxTs - timestamp) / (maxTs - minTs) makes larger timestamps (more recent)
+  // produce smaller t values.
+  const t = (maxTs - timestamp) / (maxTs - minTs);
 
-function getAgeClass(timestamp) {
-  if (!timestamp) return "";
+  // 2. Apply non-linear curve so the visual change is more sensitive for recently-used tabs
+  //    (small age differences early on matter more than huge differences on very old tabs)
+  const u = Math.pow(t, 0.6);
 
-  const ageMs = Date.now() - timestamp;
-  const hours = ageMs / (1000 * 60 * 60);
+  // 3. Map u into HSL color space (smooth interpolation, no discrete buckets)
+  const hue   = 210 - (u * 175);   // blueish cool → orange warm
+  const sat   = 12  + (u * 58);    // low saturation → richer warm color
+  const light = 96  - (u * 10);    // very pale → a bit less pale
 
-  if (hours > 72) return "age-very-old";
-  if (hours > 24) return "age-old";
-  if (hours > 6)  return "age-today";
-  if (hours > 1)  return "age-recent";
-  return "";
+  // === DEBUG: uncomment the two lines below to see the actual numbers in the console
+  //            every time you open the popup or change filters.
+  // console.log('Age scale this render → minTs:', minTs, 'maxTs:', maxTs);
+  // console.log('  tab ts:', timestamp, '→ t=', t.toFixed(3), 'u=', u.toFixed(3), '→ color=', `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%)`);
+
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
 function formatShortDate(timestamp, fallbackText = "") {
@@ -47,42 +67,47 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Restore previous search + audio filter + sort state
   (async () => {
-    const result = await browser.storage.local.get([
-      "popupSearch",
-      "popupShowOnlyAudible",
-      "popupSortField",
-      "popupSortOrder",
-    ]);
+    try {
+      const result = await browser.storage.local.get([
+        "popupSearch",
+        "popupShowOnlyAudible",
+        "popupSortField",
+        "popupSortOrder",
+      ]);
 
-    if (result.popupSearch) {
-      searchInput.value = result.popupSearch;
+      if (result.popupSearch) {
+        searchInput.value = result.popupSearch;
+      }
+      if (result.popupShowOnlyAudible) {
+        showOnlyAudible = true;
+        audioFilterCheckbox.checked = true;
+      }
+      if (result.popupSortField) {
+        sortField = result.popupSortField;
+        sortOrder = result.popupSortOrder || 1;
+      }
+
+      // Load personal best
+      const bestResult = await browser.storage.local.get("personalBest");
+      personalBest = bestResult.personalBest || 0;
+      updatePersonalBestDisplay();
+
+      const responseTabInfoList = await browser.runtime.sendMessage("getTabInfo");
+      tabInfoList = responseTabInfoList || {};
+
+      applyFilters();
+      renderTable();
+      updateSortIndicators();
+
+      // Focus and select the search input so the user can immediately replace previous text by typing
+      searchInput.focus();
+      searchInput.select();
+    } catch (err) {
+      console.error("Popup init failed:", err);
+      // Fallback so UI still appears (empty table is better than blank)
+      applyFilters();
+      renderTable();
     }
-    if (result.popupShowOnlyAudible) {
-      showOnlyAudible = true;
-      audioFilterCheckbox.checked = true;
-    }
-    if (result.popupSortField) {
-      sortField = result.popupSortField;
-      sortOrder = result.popupSortOrder || 1;
-    }
-
-    // Load personal best
-    const bestResult = await browser.storage.local.get("personalBest");
-    personalBest = bestResult.personalBest || 0;
-    updatePersonalBestDisplay();
-
-    const responseTabInfoList = await browser.runtime.sendMessage("getTabInfo");
-    tabInfoList = responseTabInfoList || {};
-
-    checkForNewPersonalBest();
-
-    applyFilters();
-    renderTable();
-    updateSortIndicators();
-
-    // Focus and select the search input so the user can immediately replace previous text by typing
-    searchInput.focus();
-    searchInput.select();
   })();
 
   let searchDebounceTimer;
@@ -122,10 +147,6 @@ document.addEventListener("DOMContentLoaded", function () {
   function createTabRow(tabKey, tabInfo) {
     const row = document.createElement("tr");
 
-    // Age visualization
-    const ageClass = getAgeClass(tabInfo.lastOpenedTs);
-    if (ageClass) row.classList.add(ageClass);
-
     // Whole row click to switch
     row.onclick = () => switchToTab(tabInfo);
 
@@ -148,11 +169,14 @@ document.addEventListener("DOMContentLoaded", function () {
       e.stopPropagation();
       try {
         await browser.tabs.remove(tabInfo.id);
-        delete tabInfoList[tabKey];
-        applyFilters();
-        await browser.storage.local.set({ tabInfoList: tabInfoList });
-        renderTable();
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to close tab:", err);
+      }
+      // Optimistically remove from our local snapshot and re-render immediately.
+      // Background onTabRemoved will handle the real delete + storage (avoids race).
+      delete tabInfoList[tabKey];
+      applyFilters();
+      renderTable();
     };
     actionsCell.appendChild(closeButton);
     row.appendChild(actionsCell);
@@ -192,6 +216,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const titleText = document.createElement("span");
+    titleText.classList.add("tab-title-text");
     titleText.textContent = tabInfo.title || "";
     titleDiv.appendChild(titleText);
 
@@ -221,24 +246,52 @@ document.addEventListener("DOMContentLoaded", function () {
     if (countEl) {
       const newCount = filteredTabEntries.length;
       if (countEl.textContent != newCount) {
-        // Fun pop animation
+        // Fun pop animation - make the number "jump" bigger then settle.
+        // We disable transition, force it big (scale 1.3), force browser to notice
+        // the change (offsetWidth), swap the text, then re-enable the transition
+        // and go back to normal. The bouncy cubic-bezier gives it a little spring.
         countEl.style.transition = 'none';
-        countEl.style.transform = 'scale(1.4)';
+        countEl.style.transform = 'scale(1.3)';
         
-        // Force reflow
+        // Force reflow so the scale(1.3) is committed before we start the transition
         void countEl.offsetWidth;
         
         countEl.textContent = newCount;
-        countEl.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        countEl.style.transition = 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)';
         countEl.style.transform = 'scale(1)';
       }
     }
+
+    // Check for new personal best based on actual open tabs (not filtered)
+    checkForNewPersonalBest();
+
+    // === DATA-DRIVEN SCALE ===
+    // We scan ALL currently open tabs (tabInfoList) to find the real min and max
+    // lastOpenedTs that exist right now. These two numbers define the entire color scale
+    // for this render. No hard-coded "7 days" or similar.
+    let minTs = Infinity;
+    let maxTs = 0;
+    for (const key in tabInfoList) {
+      const ts = tabInfoList[key].lastOpenedTs;
+      if (ts) {
+        if (ts < minTs) minTs = ts;
+        if (ts > maxTs) maxTs = ts;
+      }
+    }
+
+    // === DEBUG (uncomment to see the actual numbers while the popup is open) ===
+    // console.log('Age scale this render - minTs:', minTs, 'maxTs:', maxTs, 'rangeHours:', (maxTs-minTs)/3600000);
 
     tableBody.innerHTML = "";
 
     const fragment = document.createDocumentFragment();
     filteredTabEntries.forEach(([tabKey, tabInfo]) => {
       const row = createTabRow(tabKey, tabInfo);
+
+      // Apply continuous age background using data-driven min/max
+      const bg = getAgeBackground(tabInfo.lastOpenedTs, minTs, maxTs);
+      if (bg) row.style.backgroundColor = bg;
+
       fragment.appendChild(row);
     });
     tableBody.appendChild(fragment);
@@ -339,7 +392,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const oldBest = personalBest;
       personalBest = currentTotal;
 
-      browser.storage.local.set({ personalBest: personalBest });
+      browser.storage.local.set({ personalBest: personalBest }).catch(() => {});
 
       updatePersonalBestDisplay();
       showNewRecordCelebration(currentTotal, oldBest);
@@ -358,20 +411,21 @@ document.addEventListener("DOMContentLoaded", function () {
       <span class="fire">🔥</span>
     `;
 
-    // Pop animation on the container
-    bestContainer.style.transition = "transform 0.2s ease";
-    bestContainer.style.transform = "scale(1.15)";
+    // Pop animation on the container - gentler scale + slower timing
+    // so the "brag moment" feels nice and friendly, not rushed.
+    bestContainer.style.transition = "transform 0.32s ease";
+    bestContainer.style.transform = "scale(1.18)";
 
     setTimeout(() => {
       bestContainer.style.transform = "scale(1)";
-    }, 150);
+    }, 220);
 
-    // Revert after a few seconds
+    // Revert after 5 seconds (gives people time to see + screenshot for bragging)
     setTimeout(() => {
       if (bestContainer) {
         bestContainer.innerHTML = originalText;
         updatePersonalBestDisplay();
       }
-    }, 4200);
+    }, 5000);
   }
 });

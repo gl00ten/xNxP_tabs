@@ -15,6 +15,15 @@
     "default_title": "xNxP Tabs",
     "default_popup": "popup.html"
   },
+  "commands": {
+    "_execute_browser_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Open xNxP Tabs popup"
+    }
+  },
   "background": {
     "scripts": ["browser-polyfill.js", "background.js"]
   },
