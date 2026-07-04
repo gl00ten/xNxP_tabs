@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "xNxP Tabs",
   "version": "1.1",
-  "description": "Friendly tab manager with search, sorting, tab age, and quick tab switching.",
+  "description": "ADHD-friendly tab manager with search, sorting, and tab age. Default shortcut: Ctrl+Shift+U (Cmd+Shift+U on Mac). Pin the extension so the toolbar icon stays visible.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -12,7 +12,7 @@
   },
   "permissions": ["tabs", "storage"],
   "browser_action": {
-    "default_title": "xNxP Tabs",
+    "default_title": "xNxP Tabs (Ctrl+Shift+U) — pin to keep icon visible",
     "default_popup": "popup.html"
   },
   "commands": {
