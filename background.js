@@ -1,3 +1,5 @@
+importScripts("browser-polyfill.js");
+
 let tabInfoList = {};
 
 // Generate a stable key for each browser tab
