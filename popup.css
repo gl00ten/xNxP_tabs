@@ -35,9 +35,10 @@
 /* ---------- Base ---------- */
 
 body {
+  position: relative;
   width: 800px; /* more realistic for extension popups — browsers often cap around here */
   margin: 0;
-  padding: 0;
+  padding: 0 0 18px;
   overflow-x: hidden;
   box-sizing: border-box;
   font-family:
@@ -91,6 +92,44 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
   text-align: center;
+}
+
+.kofi-link {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid #d0dae4;
+  background: rgba(120, 140, 160, 0.07);
+  padding: 1px 6px;
+  margin: 0;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1;
+  color: #8fa3b8;
+  cursor: pointer;
+  box-shadow: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.kofi-icon {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.kofi-label {
+  letter-spacing: 0.01em;
+}
+
+.kofi-link:hover {
+  color: var(--muted);
+  border-color: #b8c8d8;
+  background: rgba(120, 140, 160, 0.12);
 }
 
 .tab-count {

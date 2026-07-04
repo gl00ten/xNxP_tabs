@@ -57,6 +57,13 @@ document.addEventListener("DOMContentLoaded", function () {
   const searchInput = document.getElementById("search-input");
   const tableHeaders = document.querySelectorAll("th[data-sort]");
   const audioFilterCheckbox = document.getElementById("audio-filter-checkbox");
+  const kofiLink = document.getElementById("kofi-link");
+
+  if (kofiLink) {
+    kofiLink.addEventListener("click", () => {
+      browser.tabs.create({ url: "https://ko-fi.com/gl00ten" });
+    });
+  }
 
   let tabInfoList = {};
   let filteredTabEntries = [];
