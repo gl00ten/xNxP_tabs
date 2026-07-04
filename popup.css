@@ -101,35 +101,35 @@ body {
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.92);
-  padding: 3px 9px;
+  gap: 2px;
+  border: 1px solid #d0dae4;
+  background: rgba(120, 140, 160, 0.07);
+  padding: 1px 6px;
   margin: 0;
   border-radius: 9999px;
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 8px;
+  font-weight: 500;
   line-height: 1;
-  color: var(--muted);
+  color: #8fa3b8;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .kofi-icon {
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1;
 }
 
 .kofi-label {
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .kofi-link:hover {
-  color: var(--orange-2);
-  border-color: #ffc56a;
-  background: var(--orange-soft);
+  color: var(--muted);
+  border-color: #b8c8d8;
+  background: rgba(120, 140, 160, 0.12);
 }
 
 .tab-count {
