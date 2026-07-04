@@ -35,9 +35,10 @@
 /* ---------- Base ---------- */
 
 body {
+  position: relative;
   width: 800px; /* more realistic for extension popups — browsers often cap around here */
   margin: 0;
-  padding: 0;
+  padding: 0 0 18px;
   overflow-x: hidden;
   box-sizing: border-box;
   font-family:
@@ -94,20 +95,23 @@ body {
 }
 
 .kofi-link {
+  position: absolute;
+  right: 10px;
+  bottom: 4px;
+  z-index: 2;
   border: none;
   background: none;
-  padding: 0;
+  padding: 2px 4px;
   margin: 0;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  opacity: 0.5;
+  opacity: 0.35;
   transition: opacity 0.15s ease;
 }
 
 .kofi-link:hover {
-  opacity: 0.9;
+  opacity: 0.75;
 }
 
 .tab-count {
