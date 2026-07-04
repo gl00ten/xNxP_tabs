@@ -1,10 +1,10 @@
 # xNxP Tabs
 
-ADHD-friendly tab manager showing first opened + last active time. Default shortcut: **Ctrl+Shift+U** (Windows/Linux) or **Cmd+Shift+U** (Mac). **Pin the extension** so the toolbar icon stays visible.
+ADHD friendly tab manager showing first opened + last active time. Default shortcut: **Ctrl+Shift+U** (Windows/Linux) or **Cmd+Shift+U** (Mac). **Pin the extension** so the toolbar icon stays visible.
 
 ## Usage
 
-1. **Pin the extension** — click the puzzle-piece icon in the toolbar, then pin xNxP Tabs so it is always shown.
+1. **Pin the extension**: click the puzzle-piece icon in the toolbar, then pin xNxP Tabs so it is always shown.
 2. Open the popup by clicking the pinned icon or with the keyboard shortcut (**Ctrl+Shift+U** / **Cmd+Shift+U**).
 3. Search is automatically focused and selected when the popup opens.
 
