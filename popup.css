@@ -101,14 +101,14 @@ body {
   z-index: 10;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   border: 1px solid rgba(208, 218, 228, 0.45);
   background: rgba(255, 255, 255, 0.45);
-  padding: 1px 6px;
+  padding: 0 4px;
   margin: 0;
   border-radius: 9999px;
   font-family: inherit;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 500;
   line-height: 1;
   color: rgba(143, 163, 184, 0.75);
@@ -118,7 +118,7 @@ body {
 }
 
 .kofi-icon {
-  font-size: 9px;
+  font-size: 7px;
   line-height: 1;
 }
 
