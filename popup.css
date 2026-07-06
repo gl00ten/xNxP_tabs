@@ -95,15 +95,15 @@ body {
 }
 
 .kofi-link {
-  position: absolute;
+  position: fixed;
   right: 10px;
   bottom: 6px;
-  z-index: 2;
+  z-index: 10;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   border: 1px solid #d0dae4;
-  background: rgba(120, 140, 160, 0.07);
+  background: rgba(255, 255, 255, 0.92);
   padding: 1px 6px;
   margin: 0;
   border-radius: 9999px;
