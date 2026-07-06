@@ -23,5 +23,5 @@ Customize the shortcut at `chrome://extensions/shortcuts`.
 
 - This branch targets Chrome with **Manifest V3** (service worker background).
 - The extension uses the `webextension-polyfill` so we can use the modern `browser.*` APIs.
-- For the Firefox build, see the `firefox-extension` branch (Manifest V2).
+- For the Firefox build, see the `firefox_extension` branch (Manifest V2).
 - Large design source files (`ori_icon*.png`) are intentionally ignored via `.gitignore`.
