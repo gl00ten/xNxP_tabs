@@ -35,10 +35,9 @@
 /* ---------- Base ---------- */
 
 body {
-  position: relative;
   width: 800px; /* more realistic for extension popups — browsers often cap around here */
   margin: 0;
-  padding: 0 0 18px;
+  padding: 0;
   overflow-x: hidden;
   box-sizing: border-box;
   font-family:
