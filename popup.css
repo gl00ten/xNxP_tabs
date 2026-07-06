@@ -102,8 +102,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  border: 1px solid #d0dae4;
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(208, 218, 228, 0.45);
+  background: rgba(255, 255, 255, 0.45);
   padding: 1px 6px;
   margin: 0;
   border-radius: 9999px;
@@ -111,7 +111,7 @@ body {
   font-size: 8px;
   font-weight: 500;
   line-height: 1;
-  color: #8fa3b8;
+  color: rgba(143, 163, 184, 0.75);
   cursor: pointer;
   box-shadow: none;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
@@ -128,8 +128,8 @@ body {
 
 .kofi-link:hover {
   color: var(--muted);
-  border-color: #b8c8d8;
-  background: rgba(120, 140, 160, 0.12);
+  border-color: rgba(184, 200, 216, 0.7);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .tab-count {
