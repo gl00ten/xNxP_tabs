@@ -1,19 +1,30 @@
 {
-  "manifest_version": 2,
-  "name": "XNXP Tab Manager",
-  "version": "1.0",
-  "description": "Lists all open tabs and stores their info",
+  "manifest_version": 3,
+  "name": "xNxP Tabs",
+  "version": "1.1.4",
+  "description": "ADHD friendly tab manager with search, sorting and tab age. Ctrl+Shift+U. Pin it. I use Firefox mostly, please report Chrome bugs.",
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
+    "96": "icons/icon96.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["tabs","storage"],
-  "browser_action": {
+  "permissions": ["tabs", "storage"],
+  "action": {
+    "default_title": "xNxP Tabs (Ctrl+Shift+U), pin to keep icon visible",
     "default_popup": "popup.html"
   },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Open xNxP Tabs popup"
+    }
+  },
   "background": {
-    "scripts": ["background.js"],
-    "persistent": false
+    "service_worker": "background.js"
   }
 }

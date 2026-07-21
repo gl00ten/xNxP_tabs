@@ -1,0 +1,31 @@
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Build / packaging artifacts
+*.xpi
+*.zip
+*.crx
+web-ext-artifacts/
+dist/
+build/
+
+# Large source / design assets (we only ship the optimized icons/)
+icons/ori_icon*.png
+icons/*.psd
+icons/*.ai
+icons/*.fig
+icons/*.sketch
+icons/*-source.*
+
+# IDE / tooling
+.idea/
+.vscode/
+*.code-workspace
+
+# Misc
+*.log
+.env
+.env.local

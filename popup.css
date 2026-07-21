@@ -1,86 +1,415 @@
-/* Reset some default browser styles */
-html, body, h1, table {
-  margin: 0;
-  padding: 0;
-  border: none;
+:root {
+  --bg: #eef7ff;
+  --panel: #ffffff;
+
+  --blue: #148dff;
+  --blue-2: #0a6fe8;
+  --blue-3: #005fd1;
+  --blue-soft: #e8f4ff;
+  --cyan: #35c7ff;
+
+  --orange: #ff9f1c;
+  --orange-2: #ff8c00;
+  --orange-soft: #fff1d6;
+
+  --purple: #7c5cff;
+  --purple-soft: #a486ff;
+  --pink: #ff6fb1;
+
+  --text: #102033;
+  --muted: #4f6682;
+  --faint: #7f96b0;
+
+  --border: #bdd8f2;
+  --row: #f8fbff;
+  --row-alt: #edf6ff;
+  --row-hover: #fff1d6;
+
+  /* UI spacing - simplified */
+  --space-xs: 4px;
+  --space-s: 6px;
+  --space-m: 8px;
+  --space-l: 12px;
 }
+
+/* ---------- Base ---------- */
 
 body {
-  font-family: Arial, sans-serif;
-  background-color: #f5f5f5;
-  width: 800px; /* Increase the width */
-  padding: 10px;
+  width: 800px; /* more realistic for extension popups — browsers often cap around here */
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(255, 159, 28, 0.22), transparent 26%),
+    radial-gradient(circle at 94% 0%, rgba(20, 141, 255, 0.24), transparent 30%),
+    linear-gradient(135deg, #edf7ff 0%, #f7fbff 45%, #fff8ed 100%);
 }
 
-h1 {
-  font-size: 24px;
-  color: #333;
-  margin-bottom: 20px;
-  text-align: center; /* Center the title */
+/* ---------- Header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
+  border-bottom: 3px solid var(--orange);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
 }
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  width: 88px;
+}
+
+.brand-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.kofi-link {
+  position: fixed;
+  right: 10px;
+  bottom: 6px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid rgba(208, 218, 228, 0.45);
+  background: rgba(255, 255, 255, 0.45);
+  padding: 0 4px;
+  margin: 0;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 7px;
+  font-weight: 500;
+  line-height: 1;
+  color: rgba(143, 163, 184, 0.75);
+  cursor: pointer;
+  box-shadow: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.kofi-icon {
+  font-size: 7px;
+  line-height: 1;
+}
+
+.kofi-label {
+  letter-spacing: 0.01em;
+}
+
+.kofi-link:hover {
+  color: var(--muted);
+  border-color: rgba(184, 200, 216, 0.7);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tab-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  color: #183c5f;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.tab-count .current {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tab-count .count {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--orange-2);
+  line-height: 1;
+  /* slower + bouncy so the number pop feels cute instead of frantic */
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  display: inline-block;
+}
+
+.tab-count .label {
+  font-weight: 600;
+  opacity: 0.85;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tab-count .personal-best {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  color: #c45c00;
+  font-weight: 700;
+}
+
+.tab-count .personal-best .number {
+  font-weight: 800;
+  color: #ff6b00;
+}
+
+.tab-count .personal-best .fire {
+  font-size: 10px;
+}
+
+#search-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 8px;
+  border: 2px solid #b8d9f6;
+  border-radius: 12px;
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+  background: white;
+}
+
+#search-input::placeholder {
+  color: var(--faint);
+}
+
+#search-input:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.18);
+}
+
+.audio-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 30px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #183c5f;
+  background: #f0f6ff;
+  border: 1px solid #b8d9f6;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.audio-filter input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #ff8c00;
+}
+
+.audio-filter input[type="checkbox"]:checked + span {
+  color: #c45c00;
+  font-weight: 700;
+}
+
+/* ---------- Table ---------- */
 
 table {
-  border-collapse: collapse;
   width: 100%;
-  font-size: 14px; /* Increase the font size */
+  margin: var(--space-l) var(--space-m);
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
-thead {
-  background-color: #007BFF;
+thead { background: linear-gradient(90deg, #0a6fe8 0%, #148dff 55%, #ffb347 100%); }
+
+th, td {
+  padding: 6px 5px;
+  vertical-align: middle;
+  font-size: 12px;
 }
 
 th {
-  padding: 8px;
-  font-size: 14px;
-  color: #ffffff;
-  text-align: left;
-  border-bottom: 1px solid #007BFF;
+  color: white;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 4px rgba(0, 0, 0, 0.45);
 }
 
-td {
-  padding: 8px;
-  font-size: 14px;
-  color: #333;
-  border-bottom: 1px solid #eee;
+tbody tr:nth-child(odd) {
+  background: var(--row);
 }
 
-tr:nth-child(even) {
-  background-color: #f0f0f0;
+tbody tr:nth-child(even) {
+  background: var(--row-alt);
 }
 
+tbody tr {
+  cursor: pointer;
+}
 
-/* Add the following to your existing popup.css */
+tbody tr:hover td {
+  background: var(--row-hover);
+}
+
+/* Age backgrounds are fully data-driven:
+   - In renderTable we compute min/max lastOpenedTs from the *current open tabs*
+   - getAgeBackground(ts, minTs, maxTs) returns a continuous HSL color (no fixed 7-day cutoff)
+   - This makes the scale relative to the tabs you actually have right now */
+
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- Column widths (using classes for maintainability) ---------- */
+
+.col-actions { width: 78px; }
+.col-date    { width: 76px; }
+
+.col-tab {
+  width: 540px;
+  overflow: hidden;
+}
+
+/* Dates - body cells */
+.col-date {
+  color: #183c5f;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Date column headers - make them white with strong black shadow for visibility */
+th.col-date {
+  color: white;
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 4px rgba(0, 0, 0, 0.45);
+  font-weight: 700;
+}
+
+/* ---------- Main tab cell (now column 4) ---------- */
+
+.tab-cell {
+  overflow: hidden;
+  min-width: 0; /* helps with flex-like shrinking inside table cells */
+}
+
+.tab-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.tab-favicon {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.tab-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-url-inline {
+  font-size: 9.5px;
+  color: #1768ad;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 18px;
+}
+
+/* ---------- Buttons ---------- */
+
 .action-button {
-  background-color: #007BFF;
+  display: inline-block;
+  width: auto;
+  min-width: 42px;
+  margin: 1px 1px; /* tighter horizontal spacing next to date columns */
+  padding: 4px 6px;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue-2), var(--blue));
   color: white;
   cursor: pointer;
-  font-size: 12px;
-  margin-right: 5px;
-  padding: 5px 10px;
+  font-size: 10.5px;
+  font-weight: 850;
+  box-shadow: 0 2px 7px rgba(20, 141, 255, 0.24);
 }
 
 .action-button:hover {
-  background-color: #0056b3;
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--orange-2), #ffb347);
+  box-shadow: 0 3px 9px rgba(255, 159, 28, 0.3);
 }
 
-/* Add the following to your existing popup.css */
-th[data-sort] {
-  cursor: pointer;
+.action-button:active {
+  transform: translateY(0);
 }
 
-th[data-sort]:hover {
-  text-decoration: underline;
+.action-button:nth-child(2) {
+  background: linear-gradient(135deg, var(--purple), var(--purple-soft));
 }
 
-/* Add a style for the input search box */
-input#search-input {
-  display: block;
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 20px;
-  font-size: 16px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+.action-button:nth-child(2):hover {
+  background: linear-gradient(135deg, #ff6b35, var(--orange));
 }
+
+/* ---------- Sort arrow ---------- */
+
+.sort-indicator {
+  display: inline-block;
+  width: 9px;
+  margin-left: 2px;
+  font-size: 9px;
+  color: #fff4cc;
+}
+
+.audio-indicator {
+  color: #ff8c00;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
