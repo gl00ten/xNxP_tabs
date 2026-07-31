@@ -929,13 +929,22 @@ document.addEventListener("DOMContentLoaded", function () {
       tableBody.removeChild(tableBody.firstChild);
     }
 
-    const nowMs = Date.now();
+    // Relative scale among currently open tabs: newest = no color → blue → orange
+    let minTs = Infinity;
+    let maxTs = 0;
+    for (const key in tabInfoList) {
+      const ts = tabInfoList[key].lastOpenedTs;
+      if (ts) {
+        if (ts < minTs) minTs = ts;
+        if (ts > maxTs) maxTs = ts;
+      }
+    }
+
     const fragment = document.createDocumentFragment();
     filteredTabEntries.forEach(([tabKey, tabInfo]) => {
       const row = createTabRow(tabKey, tabInfo);
 
-      // Absolute last-opened age: left stripe + soft wash (readable at 1k+ tabs)
-      const age = Core.getAgeColors(tabInfo.lastOpenedTs, nowMs);
+      const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
       if (age) {
         row.style.boxShadow = "inset 4px 0 0 " + age.stripe;
         row.style.backgroundColor = age.wash;

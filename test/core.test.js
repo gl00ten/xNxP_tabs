@@ -142,29 +142,30 @@ describe("formatShortDate", () => {
   });
 });
 
-describe("getAgeScore / getAgeColors", () => {
-  const now = Date.UTC(2026, 6, 31, 12, 0, 0);
+describe("getAgeColors (linear newest → blue → orange)", () => {
+  const minTs = 1000;
+  const maxTs = 2000;
 
-  it("scores recent tabs near 0 and old tabs near 1", () => {
-    const hour = 3600000;
-    const day = 86400000;
-    assert.ok(core.getAgeScore(now - 5 * 60 * 1000, now) < 0.12);
-    assert.ok(core.getAgeScore(now - 12 * hour, now) > 0.15);
-    assert.ok(core.getAgeScore(now - 3 * day, now) > 0.4);
-    assert.ok(core.getAgeScore(now - 60 * day, now) > 0.85);
+  it("returns null for the most recent tab", () => {
+    assert.equal(core.getAgeColors(maxTs, minTs, maxTs), null);
+    assert.equal(core.getAgeT(maxTs, minTs, maxTs), 0);
   });
 
-  it("returns stripe + wash colors", () => {
-    const colors = core.getAgeColors(now - 2 * 86400000, now);
-    assert.ok(colors);
-    assert.match(colors.stripe, /^hsl\(/);
-    assert.match(colors.wash, /^hsl\(/);
-    assert.ok(colors.t > 0.3 && colors.t < 0.75);
+  it("returns colors for mid and oldest", () => {
+    const mid = core.getAgeColors(1500, minTs, maxTs);
+    assert.ok(mid);
+    assert.ok(Math.abs(mid.t - 0.5) < 0.001);
+    assert.match(mid.wash, /^hsl\(/);
+    assert.match(mid.stripe, /^hsl\(/);
+
+    const old = core.getAgeColors(minTs, minTs, maxTs);
+    assert.ok(old);
+    assert.equal(old.t, 1);
   });
 
-  it("returns null without timestamp", () => {
-    assert.equal(core.getAgeColors(0, now), null);
-    assert.equal(core.getAgeColors(null, now), null);
+  it("returns null when range is invalid", () => {
+    assert.equal(core.getAgeColors(1000, 1000, 1000), null);
+    assert.equal(core.getAgeColors(0, 1, 2), null);
   });
 });
 
