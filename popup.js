@@ -141,10 +141,13 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugStatus = document.getElementById("debug-status");
   const menuBtn = document.getElementById("menu-btn");
   const actionsMenu = document.getElementById("actions-menu");
+  const memBar = document.getElementById("mem-bar");
   const memStatsEl = document.getElementById("mem-stats");
   const windowPicker = document.getElementById("window-picker");
   const windowPickerList = document.getElementById("window-picker-list");
   const windowPickerCancel = document.getElementById("window-picker-cancel");
+  // Stats bar only when using the ☰ menu / after an unload (not on every open)
+  let memBarPinned = false;
 
   if (kofiLink) {
     kofiLink.addEventListener("click", () => {
@@ -175,9 +178,15 @@ document.addEventListener("DOMContentLoaded", function () {
     return { total: tabs.length, loaded, discarded };
   }
 
-  /** Firefox does not expose process RAM to extensions; we show load counts. */
+  function setMemBarVisible(show) {
+    if (!memBar) return;
+    memBar.hidden = !show;
+  }
+
+  /** Tab load counts (Firefox does not expose process RAM to add-ons). */
   async function refreshMemBar(extra = null) {
     if (!memStatsEl) return;
+    setMemBarVisible(true);
     try {
       const stats = await getTabLoadStats();
       while (memStatsEl.firstChild) {
@@ -201,16 +210,10 @@ document.addEventListener("DOMContentLoaded", function () {
         memStatsEl.appendChild(document.createTextNode(" · "));
         const delta = document.createElement("span");
         delta.className = "mem-delta";
-        delta.textContent = "just unloaded " + extra.unloaded;
+        delta.textContent = "just unloaded " + extra.unloaded + " from memory";
         memStatsEl.appendChild(delta);
+        memBarPinned = true;
       }
-
-      memStatsEl.appendChild(document.createTextNode(" "));
-      const note = document.createElement("span");
-      note.className = "mem-note";
-      note.textContent =
-        "(tab load counts · browser RAM not exposed to add-ons)";
-      memStatsEl.appendChild(note);
     } catch (err) {
       memStatsEl.textContent = "Could not read tab stats";
     }
@@ -290,6 +293,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!actionsMenu || !menuBtn) return;
     actionsMenu.hidden = !open;
     menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      refreshMemBar();
+    } else if (!memBarPinned) {
+      setMemBarVisible(false);
+    }
   }
 
   function setWindowPickerOpen(open) {
@@ -633,7 +641,6 @@ document.addEventListener("DOMContentLoaded", function () {
       applyFilters();
       renderTable();
       updateSortIndicators();
-      refreshMemBar();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
       // Defer focus slightly so stylesheets can settle (reduces FOUC/layout warnings).
@@ -647,7 +654,6 @@ document.addEventListener("DOMContentLoaded", function () {
       tabInfoList = {};
       applyFilters();
       renderTable();
-      refreshMemBar();
       if (debugMode) setDebugStatus("Popup init failed: " + loadError);
     }
   })();

@@ -605,6 +605,10 @@ th.col-date {
   line-height: 1.35;
 }
 
+.mem-bar[hidden] {
+  display: none !important;
+}
+
 .mem-bar strong {
   color: var(--text);
   font-weight: 700;
