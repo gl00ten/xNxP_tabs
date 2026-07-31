@@ -142,15 +142,29 @@ describe("formatShortDate", () => {
   });
 });
 
-describe("getAgeBackground", () => {
-  it("returns null for invalid ranges", () => {
-    assert.equal(core.getAgeBackground(0, 1, 2), null);
-    assert.equal(core.getAgeBackground(5, 5, 5), null);
+describe("getAgeScore / getAgeColors", () => {
+  const now = Date.UTC(2026, 6, 31, 12, 0, 0);
+
+  it("scores recent tabs near 0 and old tabs near 1", () => {
+    const hour = 3600000;
+    const day = 86400000;
+    assert.ok(core.getAgeScore(now - 5 * 60 * 1000, now) < 0.12);
+    assert.ok(core.getAgeScore(now - 12 * hour, now) > 0.15);
+    assert.ok(core.getAgeScore(now - 3 * day, now) > 0.4);
+    assert.ok(core.getAgeScore(now - 60 * day, now) > 0.85);
   });
 
-  it("returns hsl string for valid range", () => {
-    const bg = core.getAgeBackground(50, 0, 100);
-    assert.match(bg, /^hsl\(/);
+  it("returns stripe + wash colors", () => {
+    const colors = core.getAgeColors(now - 2 * 86400000, now);
+    assert.ok(colors);
+    assert.match(colors.stripe, /^hsl\(/);
+    assert.match(colors.wash, /^hsl\(/);
+    assert.ok(colors.t > 0.3 && colors.t < 0.75);
+  });
+
+  it("returns null without timestamp", () => {
+    assert.equal(core.getAgeColors(0, now), null);
+    assert.equal(core.getAgeColors(null, now), null);
   });
 });
 

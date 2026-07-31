@@ -924,29 +924,22 @@ document.addEventListener("DOMContentLoaded", function () {
     // Check for new personal best based on actual open tabs (not filtered)
     checkForNewPersonalBest();
 
-    // === DATA-DRIVEN SCALE ===
-    let minTs = Infinity;
-    let maxTs = 0;
-    for (const key in tabInfoList) {
-      const ts = tabInfoList[key].lastOpenedTs;
-      if (ts) {
-        if (ts < minTs) minTs = ts;
-        if (ts > maxTs) maxTs = ts;
-      }
-    }
-
     // Safe clear (avoids any innerHTML usage/warnings)
     while (tableBody.firstChild) {
       tableBody.removeChild(tableBody.firstChild);
     }
 
+    const nowMs = Date.now();
     const fragment = document.createDocumentFragment();
     filteredTabEntries.forEach(([tabKey, tabInfo]) => {
       const row = createTabRow(tabKey, tabInfo);
 
-      // Apply continuous age background using data-driven min/max
-      const bg = Core.getAgeBackground(tabInfo.lastOpenedTs, minTs, maxTs);
-      if (bg) row.style.backgroundColor = bg;
+      // Absolute last-opened age: left stripe + soft wash (readable at 1k+ tabs)
+      const age = Core.getAgeColors(tabInfo.lastOpenedTs, nowMs);
+      if (age) {
+        row.style.boxShadow = "inset 4px 0 0 " + age.stripe;
+        row.style.backgroundColor = age.wash;
+      }
 
       fragment.appendChild(row);
     });
