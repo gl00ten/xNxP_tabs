@@ -25,28 +25,14 @@ describe("isDiscardableUrl", () => {
   });
 });
 
-describe("selectUnloadAllOthersIds", () => {
-  const tabs = [
-    { id: 1, url: "https://a.com", active: true, pinned: false, discarded: false },
-    { id: 2, url: "https://b.com", active: false, pinned: false, discarded: false },
-    { id: 3, url: "https://c.com", active: false, pinned: true, discarded: false },
-    { id: 4, url: "https://d.com", active: false, pinned: false, discarded: true },
-    { id: 5, url: "about:blank", active: false, pinned: false, discarded: false },
-    { id: 6, url: "https://e.com", active: false, pinned: false, discarded: false },
-  ];
-
-  it("keeps the specified tab and skips pinned/discarded/internal", () => {
-    const ids = core.selectUnloadAllOthersIds(tabs, 1);
-    assert.deepEqual(ids.sort((a, b) => a - b), [2, 6]);
-  });
-});
-
 describe("selectUnloadListedIds", () => {
   const tabs = [
     { id: 1, url: "https://a.com", pinned: false, discarded: false },
     { id: 2, url: "https://b.com", pinned: false, discarded: false },
     { id: 3, url: "https://c.com", pinned: false, discarded: false },
     { id: 4, url: "https://d.com", pinned: true, discarded: false },
+    { id: 5, url: "about:blank", pinned: false, discarded: false },
+    { id: 6, url: "https://e.com", pinned: false, discarded: true },
   ];
 
   it("only unloads ids present in the list, keeps keepTabId", () => {
@@ -54,8 +40,8 @@ describe("selectUnloadListedIds", () => {
     assert.deepEqual(ids, [2]);
   });
 
-  it("with full list equals unload-all-others style set", () => {
-    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4], 1);
+  it("with full list skips keep, pinned, discarded, internal", () => {
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4, 5, 6], 1);
     assert.deepEqual(ids.sort((a, b) => a - b), [2, 3]);
   });
 });
@@ -102,7 +88,6 @@ describe("analyzeDuplicates", () => {
       { id: 3, url: "https://dup.com", active: false, pinned: false, lastAccessed: 200 },
     ];
     const result = core.analyzeDuplicates(tabs, {});
-    // keeps active (1) and newest (2); closes 3 only
     assert.deepEqual(result.toCloseIds.sort((a, b) => a - b), [3]);
   });
 
@@ -147,13 +132,7 @@ describe("formatWindowLabel", () => {
   });
 });
 
-describe("formatShortDate / formatDateParts", () => {
-  it("formats a known timestamp as one line", () => {
-    const s = core.formatShortDate(new Date(2020, 0, 15, 10, 5).getTime());
-    assert.match(s, /^\d{2}\.\d{2}\.\d{2} \d{2}:\d{2}$/);
-    assert.ok(s.startsWith("20.01.15"));
-  });
-
+describe("formatDateParts", () => {
   it("splits date and time for two-line cells", () => {
     const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime());
     assert.equal(parts.date, "20.01.15");
@@ -161,9 +140,8 @@ describe("formatShortDate / formatDateParts", () => {
   });
 
   it("returns fallback when missing", () => {
-    assert.equal(core.formatShortDate(0, "n/a"), "n/a");
-    assert.equal(core.formatShortDate(null, ""), "");
     assert.deepEqual(core.formatDateParts(0, "n/a"), { date: "n/a", time: "" });
+    assert.equal(core.formatDateParts(null, ""), null);
   });
 });
 
@@ -181,7 +159,6 @@ describe("getAgeColors (linear newest → blue → orange)", () => {
     assert.ok(mid);
     assert.ok(Math.abs(mid.t - 0.5) < 0.001);
     assert.match(mid.wash, /^hsl\(/);
-    assert.equal(mid.stripe, undefined);
 
     const old = core.getAgeColors(minTs, minTs, maxTs);
     assert.ok(old);
@@ -215,11 +192,5 @@ describe("buildWindowUnloadRows", () => {
     assert.equal(rows[1].win.id, 1);
     assert.equal(rows[1].unloadable, 1);
     assert.equal(rows[1].isCurrent, true);
-  });
-});
-
-describe("chunkIds", () => {
-  it("splits into chunks", () => {
-    assert.deepEqual(core.chunkIds([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   });
 });

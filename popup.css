@@ -1,34 +1,24 @@
 :root {
-  --bg: #f3f7fc;
   --panel: #ffffff;
 
   --blue: #148dff;
   --blue-2: #0a6fe8;
-  --blue-3: #005fd1;
   --blue-soft: #e8f4ff;
-  --cyan: #35c7ff;
 
   --orange: #ff9f1c;
   --orange-2: #ff8c00;
-  --orange-3: #ff6b00;
   --orange-soft: #fff4e0;
-
-  --purple: #7c5cff;
-  --purple-soft: #a486ff;
-  --pink: #ff6fb1;
 
   --text: #102033;
   --muted: #4f6682;
   --faint: #7f96b0;
 
-  /* Slightly warmer borders so the UI isn’t all cool blue */
   --border: #d0dceb;
   --border-warm: #f0d4a8;
   --row: #fafcfe;
   --row-alt: #f3f7fc;
   --row-hover: #fff3e0;
 
-  /* Shared brand gradients — more orange on the right */
   --grad-header: linear-gradient(
     105deg,
     #0a6fe8 0%,
@@ -47,11 +37,8 @@
   --grad-switch: linear-gradient(180deg, #2aa0ff 0%, #0a6fe8 100%);
   --grad-close: linear-gradient(180deg, #9b7cff 0%, #6a4de8 100%);
 
-  /* UI spacing - simplified */
-  --space-xs: 4px;
   --space-s: 6px;
   --space-m: 8px;
-  --space-l: 12px;
 }
 
 /* ---------- Base ---------- */
