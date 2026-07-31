@@ -187,22 +187,23 @@ document.addEventListener("DOMContentLoaded", function () {
     return discarded;
   }
 
-  async function countUnloadAllOthers() {
+  /** Unload tabs currently shown in the table (search/filters). Empty search = all. */
+  async function countUnloadListed() {
     const [current] = await browser.tabs.query({
       active: true,
       currentWindow: true,
     });
-    if (!current) return { count: 0, ids: [], keptId: null };
+    const listedIds = filteredTabEntries.map(([, tab]) => tab.id);
     const tabs = await browser.tabs.query({});
-    const ids = Core.selectUnloadAllOthersIds(tabs, current.id);
-    return { count: ids.length, ids, keptId: current.id };
+    const keepId = current ? current.id : null;
+    const ids = Core.selectUnloadListedIds(tabs, listedIds, keepId);
+    return { count: ids.length, ids, keptId: keepId };
   }
 
-  async function unloadAllOthers() {
-    const { ids, keptId } = await countUnloadAllOthers();
-    if (keptId == null) throw new Error("No active tab");
+  async function unloadListedTabs() {
+    const { ids } = await countUnloadListed();
     const unloaded = await discardInChunks(ids);
-    return { unloaded, keptId };
+    return { unloaded };
   }
 
   async function unloadInWindow(windowId) {
@@ -222,9 +223,23 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!unloadAllSummary) return;
     try {
       unloadAllSummary.textContent = "Counting tabs…";
-      const { count } = await countUnloadAllOthers();
+      const { count } = await countUnloadListed();
+      const filtered = filteredTabEntries.length;
+      const hasFilter =
+        !!(searchInput && searchInput.value) || showOnlyAudible;
+
       if (count === 0) {
-        unloadAllSummary.textContent = "No other tabs to unload from memory";
+        unloadAllSummary.textContent = hasFilter
+          ? "No listed tabs can be unloaded (filters may hide them)"
+          : "No tabs to unload from memory";
+      } else if (hasFilter) {
+        unloadAllSummary.textContent =
+          count +
+          " listed tab" +
+          (count === 1 ? "" : "s") +
+          " will be unloaded from memory (of " +
+          filtered +
+          " shown)";
       } else {
         unloadAllSummary.textContent =
           count +
@@ -431,15 +446,15 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      if (action === "unload-all-others") {
+      if (action === "unload-listed") {
         item.disabled = true;
         setMenuOpen(false);
         try {
-          const result = await unloadAllOthers();
+          const result = await unloadListedTabs();
           await reloadTabListFromBrowser();
           await refreshMemBar({ unloaded: result.unloaded });
         } catch (err) {
-          console.error("Unload all others failed:", err);
+          console.error("Unload listed tabs failed:", err);
           if (memStatsEl) {
             memStatsEl.textContent = "Unload failed: " + err;
           }

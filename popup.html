@@ -43,10 +43,10 @@
           aria-expanded="false"
         >☰</button>
         <div id="actions-menu" class="actions-menu" hidden role="menu">
-          <button type="button" class="actions-menu-item" data-action="unload-all-others" role="menuitem">
+          <button type="button" class="actions-menu-item" data-action="unload-listed" role="menuitem">
             <span class="actions-menu-icon" aria-hidden="true">💤</span>
             <span class="actions-menu-body">
-              <span class="actions-menu-label">Unload other tabs from memory</span>
+              <span class="actions-menu-label">Unload listed tabs from memory</span>
               <span id="unload-all-summary" class="actions-menu-hint">Counting tabs…</span>
             </span>
           </button>
@@ -113,17 +113,19 @@
       <span id="debug-status" class="debug-status"></span>
     </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th class="col-actions">Actions</th>
-          <th class="col-date" data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
-          <th class="col-date" data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
-          <th class="col-tab" data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
-        </tr>
-      </thead>
-      <tbody id="table-body"></tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-actions">Actions</th>
+            <th class="col-date" data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
+            <th class="col-date" data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
+            <th class="col-tab" data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
 
     <div id="empty-state" class="empty-state" hidden></div>
 

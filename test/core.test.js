@@ -41,6 +41,25 @@ describe("selectUnloadAllOthersIds", () => {
   });
 });
 
+describe("selectUnloadListedIds", () => {
+  const tabs = [
+    { id: 1, url: "https://a.com", pinned: false, discarded: false },
+    { id: 2, url: "https://b.com", pinned: false, discarded: false },
+    { id: 3, url: "https://c.com", pinned: false, discarded: false },
+    { id: 4, url: "https://d.com", pinned: true, discarded: false },
+  ];
+
+  it("only unloads ids present in the list, keeps keepTabId", () => {
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 4], 1);
+    assert.deepEqual(ids, [2]);
+  });
+
+  it("with full list equals unload-all-others style set", () => {
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4], 1);
+    assert.deepEqual(ids.sort((a, b) => a - b), [2, 3]);
+  });
+});
+
 describe("selectUnloadInWindowIds", () => {
   it("keeps the active tab in the window", () => {
     const tabs = [

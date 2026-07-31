@@ -121,11 +121,12 @@ body {
 }
 
 .empty-state {
-  margin: 0 var(--space-m) var(--space-m);
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px dashed var(--border);
-  background: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  border-top: 1px dashed var(--border);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.85);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
@@ -322,20 +323,29 @@ body {
   font-weight: 700;
 }
 
-/* ---------- Table ---------- */
+/* ---------- Table (flush under chrome, no horizontal scroll) ---------- */
+
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--panel);
+  border-top: 1px solid var(--border-warm);
+  box-sizing: border-box;
+}
 
 table {
   width: 100%;
-  margin: var(--space-l) var(--space-m);
+  max-width: 100%;
+  margin: 0;
   table-layout: fixed;
   border-collapse: collapse;
-  border: 1px solid var(--border-warm);
-  border-radius: 12px;
+  border: none;
+  border-radius: 0;
   background: var(--panel);
-  box-shadow:
-    0 4px 14px rgba(20, 80, 140, 0.08),
-    0 1px 0 rgba(255, 180, 80, 0.15);
-  overflow: hidden;
+  box-shadow: none;
 }
 
 thead {
@@ -346,13 +356,14 @@ th, td {
   padding: 6px 5px;
   vertical-align: middle;
   font-size: 12px;
+  overflow: hidden;
 }
 
 th {
   color: white;
   font-size: 9.5px;
   font-weight: 700;
-  text-shadow: 
+  text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.75),
     0 0 4px rgba(0, 0, 0, 0.45);
 }
@@ -374,48 +385,46 @@ tbody tr:hover td {
   background-color: rgba(255, 243, 224, 0.72) !important;
 }
 
-/* Age backgrounds are fully data-driven:
-   - In renderTable we compute min/max lastOpenedTs from the *current open tabs*
-   - getAgeBackground(ts, minTs, maxTs) returns a continuous HSL color (no fixed 7-day cutoff)
-   - This makes the scale relative to the tabs you actually have right now */
-
-
 tbody tr:last-child td {
   border-bottom: none;
 }
 
-/* ---------- Column widths (using classes for maintainability) ---------- */
-
-.col-actions { width: 78px; }
-.col-date    { width: 76px; }
-
-.col-tab {
-  width: 540px;
-  overflow: hidden;
+/* Fixed columns + flexible last column (rest of width) */
+.col-actions {
+  width: 86px;
 }
 
-/* Dates - body cells */
 .col-date {
+  width: 70px;
   color: #183c5f;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Date column headers - make them white with strong black shadow for visibility */
+/* min-width: 0 is required for text-overflow inside table-layout: fixed */
+.col-tab {
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
 th.col-date {
   color: white;
-  text-shadow: 
+  text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.75),
     0 0 4px rgba(0, 0, 0, 0.45);
   font-weight: 700;
 }
 
-/* ---------- Main tab cell (now column 4) ---------- */
+/* ---------- Main tab cell ---------- */
 
 .tab-cell {
   overflow: hidden;
-  min-width: 0; /* helps with flex-like shrinking inside table cells */
+  min-width: 0;
+  max-width: 0; /* forces column to respect table width; content ellipsizes */
 }
 
 .tab-title {
@@ -425,6 +434,8 @@ th.col-date {
   font-size: 12px;
   line-height: 1.2;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .tab-favicon {
@@ -449,6 +460,7 @@ th.col-date {
   overflow: hidden;
   text-overflow: ellipsis;
   padding-left: 18px;
+  max-width: 100%;
 }
 
 /* ---------- Buttons ---------- */
