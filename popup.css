@@ -591,6 +591,24 @@ th.col-date {
   color: var(--muted);
 }
 
+.actions-menu-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+.actions-menu-dupes {
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.actions-menu-dupes.has-dupes {
+  color: #c45c00;
+}
+
 /* ---------- Memory / unload stats bar ---------- */
 
 .mem-bar {

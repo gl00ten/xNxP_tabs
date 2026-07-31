@@ -146,8 +146,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const windowPicker = document.getElementById("window-picker");
   const windowPickerList = document.getElementById("window-picker-list");
   const windowPickerCancel = document.getElementById("window-picker-cancel");
+  const dupesSummary = document.getElementById("dupes-summary");
+  const closeDuplicatesBtn = document.getElementById("close-duplicates-btn");
   // Stats bar only when using the ☰ menu / after an unload (not on every open)
   let memBarPinned = false;
+  let lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
 
   if (kofiLink) {
     kofiLink.addEventListener("click", () => {
@@ -280,6 +283,139 @@ document.addEventListener("DOMContentLoaded", function () {
     return { unloaded, windowId };
   }
 
+  /**
+   * Exact URL groups. Keep the most recently last-opened tab (our lastOpenedTs,
+   * else browser lastAccessed). Always keep active tabs. Close older copies.
+   * Skips pinned and internal URLs.
+   */
+  function getLastOpenedTsForTab(tab) {
+    const info = tabInfoList[String(tab.id)];
+    if (info && info.lastOpenedTs) return info.lastOpenedTs;
+    if (tab.lastAccessed) return tab.lastAccessed;
+    return 0;
+  }
+
+  async function analyzeDuplicates() {
+    const tabs = await browser.tabs.query({});
+    const byUrl = new Map();
+
+    for (const tab of tabs) {
+      if (tab.pinned) continue;
+      if (!isDiscardableUrl(tab.url)) continue;
+      const key = tab.url || "";
+      if (!key) continue;
+      if (!byUrl.has(key)) byUrl.set(key, []);
+      byUrl.get(key).push(tab);
+    }
+
+    const toCloseIds = [];
+    let groups = 0;
+
+    for (const group of byUrl.values()) {
+      if (group.length < 2) continue;
+      groups += 1;
+
+      const keepIds = new Set();
+      // Never close a currently active tab (any window)
+      for (const tab of group) {
+        if (tab.active) keepIds.add(tab.id);
+      }
+
+      // Keep the most recently last-opened among the group
+      let best = group[0];
+      let bestTs = getLastOpenedTsForTab(best);
+      for (let i = 1; i < group.length; i++) {
+        const tab = group[i];
+        const ts = getLastOpenedTsForTab(tab);
+        if (ts > bestTs) {
+          best = tab;
+          bestTs = ts;
+        }
+      }
+      keepIds.add(best.id);
+
+      for (const tab of group) {
+        if (!keepIds.has(tab.id)) {
+          toCloseIds.push(tab.id);
+        }
+      }
+    }
+
+    return { toCloseIds, count: toCloseIds.length, groups };
+  }
+
+  async function updateDuplicatesMenu() {
+    if (!dupesSummary && !closeDuplicatesBtn) return;
+    try {
+      if (dupesSummary) {
+        dupesSummary.textContent = "Checking duplicates…";
+        dupesSummary.classList.remove("has-dupes");
+      }
+      if (closeDuplicatesBtn) closeDuplicatesBtn.disabled = true;
+
+      lastDupesAnalysis = await analyzeDuplicates();
+      const { count, groups } = lastDupesAnalysis;
+
+      if (dupesSummary) {
+        if (count === 0) {
+          dupesSummary.textContent = "No duplicate tabs found";
+          dupesSummary.classList.remove("has-dupes");
+        } else {
+          dupesSummary.textContent =
+            count +
+            " duplicate tab" +
+            (count === 1 ? "" : "s") +
+            " can be closed (" +
+            groups +
+            " URL" +
+            (groups === 1 ? "" : "s") +
+            ")";
+          dupesSummary.classList.add("has-dupes");
+        }
+      }
+      if (closeDuplicatesBtn) {
+        closeDuplicatesBtn.disabled = count === 0;
+      }
+    } catch (err) {
+      console.error("Duplicate analysis failed:", err);
+      lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
+      if (dupesSummary) {
+        dupesSummary.textContent = "Could not check duplicates";
+        dupesSummary.classList.remove("has-dupes");
+      }
+      if (closeDuplicatesBtn) closeDuplicatesBtn.disabled = true;
+    }
+  }
+
+  async function closeDuplicateTabs() {
+    // Re-analyze so the list is fresh (tabs may have changed)
+    const analysis = await analyzeDuplicates();
+    lastDupesAnalysis = analysis;
+    if (!analysis.toCloseIds.length) {
+      return { closed: 0 };
+    }
+
+    let closed = 0;
+    const chunkSize = 50;
+    for (let i = 0; i < analysis.toCloseIds.length; i += chunkSize) {
+      const chunk = analysis.toCloseIds.slice(i, i + chunkSize);
+      try {
+        await browser.tabs.remove(chunk);
+        closed += chunk.length;
+      } catch (err) {
+        for (const id of chunk) {
+          try {
+            await browser.tabs.remove(id);
+            closed += 1;
+          } catch (_) {
+            // skip
+          }
+        }
+      }
+    }
+    return { closed };
+  }
+
   async function reloadTabListFromBrowser() {
     const direct = await loadTabsDirectly();
     tabInfoList = direct.tabInfoList || {};
@@ -295,6 +431,7 @@ document.addEventListener("DOMContentLoaded", function () {
     menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       refreshMemBar();
+      updateDuplicatesMenu();
     } else if (!memBarPinned) {
       setMemBarVisible(false);
     }
@@ -452,6 +589,50 @@ document.addEventListener("DOMContentLoaded", function () {
           console.error("Unload all others failed:", err);
           if (memStatsEl) {
             memStatsEl.textContent = "Unload failed: " + err;
+          }
+        } finally {
+          item.disabled = false;
+        }
+        return;
+      }
+
+      if (action === "close-duplicates") {
+        if (!lastDupesAnalysis.count) return;
+        const n = lastDupesAnalysis.count;
+        const ok = confirm(
+          "Close " +
+            n +
+            " duplicate tab" +
+            (n === 1 ? "" : "s") +
+            "?\n\nKeeps the most recently used copy of each URL (by last opened). Older copies are closed. Pinned and active tabs are kept."
+        );
+        if (!ok) return;
+
+        item.disabled = true;
+        setMenuOpen(false);
+        try {
+          const result = await closeDuplicateTabs();
+          await reloadTabListFromBrowser();
+          setMemBarVisible(true);
+          memBarPinned = true;
+          if (memStatsEl) {
+            memStatsEl.textContent =
+              "Closed " + result.closed + " duplicate tab" + (result.closed === 1 ? "" : "s");
+          }
+          await refreshMemBar();
+          if (memStatsEl && result.closed) {
+            // refreshMemBar rebuilds stats; append close note
+            memStatsEl.appendChild(document.createTextNode(" · "));
+            const delta = document.createElement("span");
+            delta.className = "mem-delta";
+            delta.textContent = "closed " + result.closed + " duplicates";
+            memStatsEl.appendChild(delta);
+          }
+        } catch (err) {
+          console.error("Close duplicates failed:", err);
+          if (memStatsEl) {
+            setMemBarVisible(true);
+            memStatsEl.textContent = "Close duplicates failed: " + err;
           }
         } finally {
           item.disabled = false;
