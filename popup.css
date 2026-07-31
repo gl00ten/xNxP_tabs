@@ -160,12 +160,12 @@ body {
   text-align: center;
 }
 
-/* Speech bubble from the brand mascot */
+/* Speech bubble below the mascot (not over the search field) */
 .speech-bubble {
   position: absolute;
-  left: calc(100% + 8px);
-  top: 4px;
-  width: min(220px, 52vw);
+  left: 0;
+  top: calc(100% + 8px);
+  width: 210px;
   padding: 8px 22px 8px 10px;
   border-radius: 12px;
   background: #fffdf8;
@@ -180,24 +180,25 @@ body {
   display: none !important;
 }
 
+/* Arrow pointing up toward the logo */
 .speech-bubble::before {
   content: "";
   position: absolute;
-  left: -8px;
-  top: 16px;
-  border-width: 7px 8px 7px 0;
+  left: 22px;
+  top: -10px;
+  border-width: 0 8px 10px 8px;
   border-style: solid;
-  border-color: transparent #ffb347 transparent transparent;
+  border-color: transparent transparent #ffb347 transparent;
 }
 
 .speech-bubble::after {
   content: "";
   position: absolute;
-  left: -5px;
-  top: 17px;
-  border-width: 6px 7px 6px 0;
+  left: 24px;
+  top: -6px;
+  border-width: 0 6px 8px 6px;
   border-style: solid;
-  border-color: transparent #fffdf8 transparent transparent;
+  border-color: transparent transparent #fffdf8 transparent;
 }
 
 .speech-bubble-text {
@@ -230,11 +231,11 @@ body {
 @keyframes speech-pop {
   from {
     opacity: 0;
-    transform: scale(0.88) translateX(-6px);
+    transform: scale(0.88) translateY(-6px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateX(0);
+    transform: scale(1) translateY(0);
   }
 }
 
