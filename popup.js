@@ -138,7 +138,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugCopyBtn = document.getElementById("debug-copy-btn");
   const debugHideBtn = document.getElementById("debug-hide-btn");
   const debugStatus = document.getElementById("debug-status");
-  const brandEl = document.querySelector(".brand");
 
   if (kofiLink) {
     kofiLink.addEventListener("click", () => {
@@ -170,33 +169,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Brand: double-click OR Alt+click opens debug (panel is under the header)
-  if (brandEl) {
-    brandEl.style.cursor = "pointer";
-    brandEl.title = "Alt+click or double-click for debug tools";
-    brandEl.addEventListener("click", (e) => {
-      if (e.altKey) {
-        e.preventDefault();
-        showDebugPanel(!debugPanelVisible);
-      }
-    });
-    brandEl.addEventListener("dblclick", (e) => {
+  // Hidden entry: Ctrl+Shift+D (Cmd+Shift+D on Mac) toggles the debug panel.
+  // No UI affordance — intentional.
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "d" || e.key === "D")) {
       e.preventDefault();
+      e.stopPropagation();
       showDebugPanel(!debugPanelVisible);
-    });
-  }
-
-  // Triple-click the tab count as another easy way to open debug
-  const countElForDebug = document.getElementById("visible-tab-count");
-  if (countElForDebug) {
-    countElForDebug.title = "Triple-click for debug tools";
-    countElForDebug.style.cursor = "pointer";
-    countElForDebug.addEventListener("click", (e) => {
-      if (e.detail === 3) {
-        showDebugPanel(!debugPanelVisible);
-      }
-    });
-  }
+    }
+  });
 
   if (debugModeCheckbox) {
     debugModeCheckbox.addEventListener("change", async () => {
@@ -254,7 +235,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateDebugPanelVisibility() {
     if (!debugPanel) return;
-    if (debugPanelVisible || debugMode) {
+    // Panel only opens via the secret shortcut (or Hide button closes it).
+    // debugMode controls logging only, not panel visibility.
+    if (debugPanelVisible) {
       debugPanel.hidden = false;
       debugPanel.removeAttribute("hidden");
     } else {
@@ -292,7 +275,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       debugMode = !!result.debugMode;
       if (debugModeCheckbox) debugModeCheckbox.checked = debugMode;
-      if (debugMode) debugPanelVisible = true;
+      debugPanelVisible = false;
       updateDebugPanelVisibility();
 
       // Load personal best
