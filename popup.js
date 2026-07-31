@@ -958,21 +958,32 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsCell.appendChild(closeButton);
     row.appendChild(actionsCell);
 
-    // Date cells (Last Opened first)
+    // Date cells: date on first line, time on second (like title/URL)
+    function fillDateCell(td, timestamp, fallback) {
+      td.classList.add("col-date");
+      const parts = Core.formatDateParts(timestamp, fallback || "");
+      if (!parts) {
+        td.textContent = "";
+        return;
+      }
+      const dateLine = document.createElement("div");
+      dateLine.className = "date-line";
+      dateLine.textContent = parts.date;
+      td.appendChild(dateLine);
+      if (parts.time) {
+        const timeLine = document.createElement("div");
+        timeLine.className = "time-line";
+        timeLine.textContent = parts.time;
+        td.appendChild(timeLine);
+      }
+    }
+
     const lastDate = document.createElement("td");
-    lastDate.classList.add("col-date");
-    lastDate.textContent = Core.formatShortDate(
-      tabInfo.lastOpenedTs,
-      tabInfo.lastOpened || ""
-    );
+    fillDateCell(lastDate, tabInfo.lastOpenedTs, tabInfo.lastOpened || "");
     row.appendChild(lastDate);
 
     const firstDate = document.createElement("td");
-    firstDate.classList.add("col-date");
-    firstDate.textContent = Core.formatShortDate(
-      tabInfo.firstOpenedTs,
-      tabInfo.firstOpened || ""
-    );
+    fillDateCell(firstDate, tabInfo.firstOpenedTs, tabInfo.firstOpened || "");
     row.appendChild(firstDate);
 
     // Tab info cell
