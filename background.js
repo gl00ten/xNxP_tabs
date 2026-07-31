@@ -296,71 +296,6 @@ async function onTabCreated(tab) {
   }
 }
 
-/**
- * Build a live snapshot of open tabs. Prefers tabs.query as source of truth.
- * Returns a structured response so the popup can distinguish empty vs error.
- */
-async function handleGetTabInfo() {
-  const started = Date.now();
-
-  try {
-    // Prefer live query first so we never blank the UI on storage glitches.
-    const openCount = await syncActiveTabs();
-    const count = Object.keys(tabInfoList).length;
-    const response = {
-      ok: true,
-      tabInfoList,
-      meta: {
-        openTabs: openCount,
-        tracked: count,
-        ms: Date.now() - started,
-        debugMode,
-      },
-    };
-    logDebug("getTabInfo ok", response.meta);
-    return response;
-  } catch (err) {
-    logDebug("getTabInfo primary failed", err);
-
-    // Fallback: rebuild from tabs.query without full storage pipeline
-    try {
-      const tabs = await browser.tabs.query({});
-      const list = {};
-      for (const tab of tabs) {
-        const key = generateTabKey(tab.id);
-        list[key] = buildTabRecord(tab, tabInfoList[key] || null);
-      }
-      tabInfoList = list;
-      const response = {
-        ok: true,
-        tabInfoList,
-        meta: {
-          openTabs: tabs.length,
-          tracked: Object.keys(list).length,
-          ms: Date.now() - started,
-          fallback: true,
-          debugMode,
-        },
-      };
-      logDebug("getTabInfo fallback ok", response.meta);
-      return response;
-    } catch (err2) {
-      logDebug("getTabInfo fallback failed", err2);
-      return {
-        ok: false,
-        tabInfoList: {},
-        error: String(err2 && err2.message ? err2.message : err2),
-        meta: {
-          openTabs: 0,
-          tracked: 0,
-          ms: Date.now() - started,
-          debugMode,
-        },
-      };
-    }
-  }
-}
-
 async function handleSetDebugMode(enabled) {
   debugMode = !!enabled;
   await browser.storage.local.set({ debugMode });
@@ -403,9 +338,6 @@ browser.tabs.onRemoved.addListener(onTabRemoved);
 browser.runtime.onMessage.addListener((request) => {
   const type = typeof request === "string" ? request : request && request.type;
 
-  if (type === "getTabInfo") {
-    return handleGetTabInfo();
-  }
   if (type === "setDebugMode") {
     return handleSetDebugMode(!!(request && request.enabled));
   }
