@@ -10,6 +10,15 @@
       <div class="brand">
         <img src="icons/icon128.png" alt="" class="brand-icon">
         <span class="brand-text">xNxP Tabs</span>
+        <div id="speech-bubble" class="speech-bubble" hidden role="status">
+          <p id="speech-bubble-text" class="speech-bubble-text"></p>
+          <button
+            type="button"
+            id="speech-bubble-dismiss"
+            class="speech-bubble-dismiss"
+            aria-label="Dismiss tip"
+          >×</button>
+        </div>
       </div>
       <input
         id="search-input"
@@ -32,29 +41,119 @@
         <input type="checkbox" id="audio-filter-checkbox">
         <span>Playing audio</span>
       </label>
+      <div class="header-menu-wrap">
+        <button
+          type="button"
+          id="menu-btn"
+          class="menu-btn"
+          title="Actions"
+          aria-label="Actions menu"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >☰</button>
+        <div id="actions-menu" class="actions-menu" hidden role="menu">
+          <button type="button" class="actions-menu-item" data-action="unload-listed" role="menuitem">
+            <span class="actions-menu-icon" aria-hidden="true">💤</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Unload listed tabs</span>
+              <span id="unload-all-summary" class="actions-menu-hint">Counting tabs…</span>
+            </span>
+          </button>
+          <button type="button" class="actions-menu-item" data-action="unload-window" role="menuitem">
+            <span class="actions-menu-icon" aria-hidden="true">🪟</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Unload tabs in one window…</span>
+              <span class="actions-menu-hint">choose a window · free memory · keep its active tab</span>
+            </span>
+          </button>
+          <div class="actions-menu-divider" role="separator"></div>
+          <div id="dupes-summary" class="actions-menu-dupes">Checking for duplicates…</div>
+          <button
+            type="button"
+            class="actions-menu-item"
+            id="close-duplicates-btn"
+            data-action="close-duplicates"
+            role="menuitem"
+            disabled
+          >
+            <span class="actions-menu-icon" aria-hidden="true">🧹</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Close duplicate tabs</span>
+              <span class="actions-menu-hint">keep the copy you used most recently</span>
+            </span>
+          </button>
+          <div class="actions-menu-divider" role="separator"></div>
+          <button
+            type="button"
+            class="actions-menu-item"
+            data-action="donate"
+            role="menuitem"
+          >
+            <span class="actions-menu-icon" aria-hidden="true">☕</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Support on Ko-fi</span>
+              <span class="actions-menu-hint">buy me a coffee if this helps</span>
+            </span>
+          </button>
+          <div class="actions-menu-divider" role="separator"></div>
+          <div class="actions-menu-tip" id="shortcut-tip">
+            Tip: open this anytime with
+            <strong id="shortcut-label">Ctrl+Shift+U</strong>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th class="col-actions">Actions</th>
-          <th class="col-date" data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
-          <th class="col-date" data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
-          <th class="col-tab" data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
-        </tr>
-      </thead>
-      <tbody id="table-body"></tbody>
-    </table>
+    <div id="mem-bar" class="mem-bar" hidden aria-live="polite">
+      <span id="mem-stats"></span>
+    </div>
 
-    <button
-      type="button"
-      id="kofi-link"
-      class="kofi-link"
-      title="Support on Ko-fi"
-      aria-label="Support on Ko-fi"
-    ><span class="kofi-icon" aria-hidden="true">☕</span><span class="kofi-label">ko-fi</span></button>
+    <div id="window-picker" class="window-picker" hidden>
+      <div class="window-picker-header">
+        <span class="window-picker-title">Unload tabs in one window</span>
+        <button type="button" id="window-picker-cancel" class="window-picker-cancel">Cancel</button>
+      </div>
+      <p class="window-picker-help">Frees memory by unloading tabs (they stay open). The active tab in that window stays loaded. Skips pinned and already unloaded tabs.</p>
+      <div id="window-picker-list" class="window-picker-list"></div>
+    </div>
+
+    <div id="debug-panel" class="debug-panel" hidden>
+      <label class="debug-toggle" title="Log extension internals for troubleshooting">
+        <input type="checkbox" id="debug-mode-checkbox" />
+        <span>Debug</span>
+      </label>
+      <button type="button" id="debug-copy-btn" class="debug-copy-btn">Copy logs</button>
+      <button type="button" id="debug-hide-btn" class="debug-copy-btn" title="Hide this panel">Hide</button>
+      <label class="debug-open-count" title="popupOpenCount — speech tips on opens 2, 6, 14">
+        <span>Opens</span>
+        <strong id="debug-open-count">0</strong>
+        <input type="number" id="debug-open-count-input" min="0" step="1" />
+        <button type="button" id="debug-open-count-set" class="debug-copy-btn">Set</button>
+        <button type="button" id="debug-tip-2" class="debug-copy-btn" title="Set count to 2 and show tip">Tip@2</button>
+        <button type="button" id="debug-tip-6" class="debug-copy-btn" title="Set count to 6 and show tip">Tip@6</button>
+        <button type="button" id="debug-tip-14" class="debug-copy-btn" title="Set count to 14 and show tip">Tip@14</button>
+      </label>
+      <span id="debug-status" class="debug-status"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-actions">Actions</th>
+            <th class="col-date" data-sort="lastOpened">Last<br />Opened <span class="sort-indicator"></span></th>
+            <th class="col-date" data-sort="firstOpened">First<br />Opened <span class="sort-indicator"></span></th>
+            <th class="col-tab" data-sort="title">Tab / URL <span class="sort-indicator"></span></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <div id="empty-state" class="empty-state" hidden></div>
 
     <script src="browser-polyfill.js"></script>
+    <script src="lib/core.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

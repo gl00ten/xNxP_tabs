@@ -1,0 +1,12 @@
+{
+  "name": "xnxp-tabs",
+  "version": "1.1.23",
+  "private": true,
+  "description": "xNxP Tabs browser extension",
+  "scripts": {
+    "test": "node --test test/core.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

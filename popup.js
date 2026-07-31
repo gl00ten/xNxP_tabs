@@ -1,55 +1,97 @@
-function getAgeBackground(timestamp, minTs, maxTs) {
-  if (!timestamp || !isFinite(minTs) || !isFinite(maxTs) || minTs >= maxTs) return null;
+// Pure helpers live in lib/core.js (unit-tested). Loaded before this file.
+const Core = globalThis.xNxPCore;
 
-  // === THE SCALE (this is the key part) ===
-  // minTs = the OLDEST last-opened timestamp among your CURRENTLY open tabs
-  // maxTs = the MOST RECENT last-opened timestamp among your CURRENTLY open tabs
-  //
-  // For any tab we compute a normalized position t:
-  //   t = 0  → this is your most recently used tab right now  → coolest color
-  //   t = 1  → this is your least recently used tab right now  → warmest color
-  //
-  // Example: suppose right now you have tabs with these lastOpenedTs values:
-  //   Tab A (most recent): 1000
-  //   Tab B:                850
-  //   Tab C (oldest):       600
-  //
-  // Then minTs=600, maxTs=1000
-  //
-  // For Tab B: t = (1000 - 850) / (1000 - 600) = 150 / 400 = 0.375
-  //
-  // The formula (maxTs - timestamp) / (maxTs - minTs) makes larger timestamps (more recent)
-  // produce smaller t values.
-  const t = (maxTs - timestamp) / (maxTs - minTs);
+/**
+ * Load open tabs from the browser itself (like Tabhunter).
+ * Does not depend on the background page being awake.
+ * Merges first/last-opened history from storage when available.
+ */
+async function loadTabsDirectly() {
+  const started = Date.now();
+  const tabs = await browser.tabs.query({});
+  const stored = await browser.storage.local.get("tabInfoList");
+  const old = stored.tabInfoList && typeof stored.tabInfoList === "object"
+    ? stored.tabInfoList
+    : {};
 
-  // 2. Apply non-linear curve so the visual change is more sensitive for recently-used tabs
-  //    (small age differences early on matter more than huge differences on very old tabs)
-  const u = Math.pow(t, 0.6);
+  // URL → pool of historical records (for session restore / tab id churn)
+  const oldByUrl = {};
+  for (const key of Object.keys(old)) {
+    const rec = old[key];
+    if (!rec) continue;
+    const url = rec.url || "";
+    if (!oldByUrl[url]) oldByUrl[url] = [];
+    oldByUrl[url].push(rec);
+  }
 
-  // 3. Map u into HSL color space (smooth interpolation, no discrete buckets)
-  const hue   = 210 - (u * 175);   // blueish cool → orange warm
-  const sat   = 12  + (u * 58);    // low saturation → richer warm color
-  const light = 96  - (u * 10);    // very pale → a bit less pale
+  const now = Date.now();
+  const nowStr = new Date().toLocaleString();
+  const list = {};
 
-  // === DEBUG: uncomment the two lines below to see the actual numbers in the console
-  //            every time you open the popup or change filters.
-  // console.log('Age scale this render → minTs:', minTs, 'maxTs:', maxTs);
-  // console.log('  tab ts:', timestamp, '→ t=', t.toFixed(3), 'u=', u.toFixed(3), '→ color=', `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%)`);
+  for (const tab of tabs) {
+    const key = String(tab.id);
+    let prev = old[key] || null;
 
-  return `hsl(${hue}, ${sat}%, ${light}%)`;
-}
+    if (!prev) {
+      const url = tab.url || "";
+      const pool = oldByUrl[url];
+      if (pool && pool.length > 0) {
+        prev = pool.reduce((best, cur) => {
+          const bestTs = best.firstOpenedTs || Infinity;
+          const curTs = cur.firstOpenedTs || Infinity;
+          return curTs < bestTs ? cur : best;
+        });
+        const idx = pool.indexOf(prev);
+        if (idx > -1) pool.splice(idx, 1);
+      }
+    }
 
-function formatShortDate(timestamp, fallbackText = "") {
-  if (!timestamp) return fallbackText;
+    const firstOpened = prev?.firstOpened || nowStr;
+    const firstOpenedTs = prev?.firstOpenedTs || now;
+    let lastOpened = prev?.lastOpened || "";
+    let lastOpenedTs = prev?.lastOpenedTs || 0;
+    if (!lastOpened && firstOpened) {
+      lastOpened = firstOpened;
+      lastOpenedTs = firstOpenedTs;
+    }
+    if (!lastOpened) {
+      lastOpened = nowStr;
+      lastOpenedTs = now;
+    }
 
-  const date = new Date(timestamp);
-  const year = String(date.getFullYear()).slice(-2);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
+    list[key] = {
+      id: tab.id,
+      windowId: tab.windowId,
+      title: tab.title || "",
+      url: tab.url || "",
+      favIconUrl: tab.favIconUrl || prev?.favIconUrl || "",
+      audible: !!tab.audible,
+      discarded: !!tab.discarded,
+      firstOpened,
+      firstOpenedTs,
+      lastOpened,
+      lastOpenedTs,
+    };
+  }
 
-  return `${year}.${month}.${day} ${hour}:${minute}`;
+  // Defer full storage write so first paint isn't competing with a huge write
+  // (tabInfoList can be large with 1k+ tabs).
+  setTimeout(() => {
+    browser.storage.local.set({ tabInfoList: list }).catch(() => {});
+  }, 0);
+
+  // Do NOT send getTabInfo here — that re-runs a full syncActiveTabs in the
+  // background and doubles work on every open.
+
+  return {
+    tabInfoList: list,
+    meta: {
+      openTabs: tabs.length,
+      tracked: Object.keys(list).length,
+      ms: Date.now() - started,
+      source: "popup-direct",
+    },
+  };
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -57,11 +99,539 @@ document.addEventListener("DOMContentLoaded", function () {
   const searchInput = document.getElementById("search-input");
   const tableHeaders = document.querySelectorAll("th[data-sort]");
   const audioFilterCheckbox = document.getElementById("audio-filter-checkbox");
-  const kofiLink = document.getElementById("kofi-link");
+  const emptyState = document.getElementById("empty-state");
+  const debugPanel = document.getElementById("debug-panel");
+  const debugModeCheckbox = document.getElementById("debug-mode-checkbox");
+  const debugCopyBtn = document.getElementById("debug-copy-btn");
+  const debugHideBtn = document.getElementById("debug-hide-btn");
+  const debugStatus = document.getElementById("debug-status");
+  const debugOpenCountEl = document.getElementById("debug-open-count");
+  const debugOpenCountInput = document.getElementById("debug-open-count-input");
+  const debugOpenCountSet = document.getElementById("debug-open-count-set");
+  const debugTip2 = document.getElementById("debug-tip-2");
+  const debugTip6 = document.getElementById("debug-tip-6");
+  const debugTip14 = document.getElementById("debug-tip-14");
+  const menuBtn = document.getElementById("menu-btn");
+  const actionsMenu = document.getElementById("actions-menu");
+  const memBar = document.getElementById("mem-bar");
+  const memStatsEl = document.getElementById("mem-stats");
+  const windowPicker = document.getElementById("window-picker");
+  const windowPickerList = document.getElementById("window-picker-list");
+  const windowPickerCancel = document.getElementById("window-picker-cancel");
+  const dupesSummary = document.getElementById("dupes-summary");
+  const closeDuplicatesBtn = document.getElementById("close-duplicates-btn");
+  const shortcutLabelEl = document.getElementById("shortcut-label");
+  const speechBubble = document.getElementById("speech-bubble");
+  const speechBubbleText = document.getElementById("speech-bubble-text");
+  const speechBubbleDismiss = document.getElementById("speech-bubble-dismiss");
+  // Stats bar only when using the ☰ menu / after an unload (not on every open)
+  let memBarPinned = false;
+  let lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
+  let cachedShortcutLabel = null;
 
-  if (kofiLink) {
-    kofiLink.addEventListener("click", () => {
-      browser.tabs.create({ url: "https://ko-fi.com/gl00ten" });
+  const KOFI_URL = "https://ko-fi.com/gl00ten";
+  // Mascot tips on these popup-open counts (1-based)
+  const SPEECH_BUBBLE_OPENS = new Set([2, 6, 14]);
+  const SPEECH_MESSAGES = {
+    2: "Psst — try the ☰ menu on the right. This extension does more stuff!",
+    6: "Hey! The ☰ menu has unload tools, duplicates, and more. Give it a peek!",
+    14: "Still exploring? ☰ on the right is packed — unload, clean dupes, and more!",
+  };
+
+  function defaultShortcutLabel() {
+    const isMac =
+      typeof navigator !== "undefined" &&
+      /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
+    return isMac ? "Cmd+Shift+U" : "Ctrl+Shift+U";
+  }
+
+  function formatShortcutLabel(raw) {
+    if (!raw) return defaultShortcutLabel();
+    return String(raw)
+      .replace(/MacCtrl/gi, "Ctrl")
+      .replace(/Command/gi, "Cmd")
+      .replace(/Control/gi, "Ctrl")
+      .replace(/Comma/gi, ",")
+      .replace(/\s*\+\s*/g, "+");
+  }
+
+  /** Real assigned shortcut from the browser, or manifest default. */
+  async function getOpenShortcutLabel() {
+    if (cachedShortcutLabel) return cachedShortcutLabel;
+    let label = defaultShortcutLabel();
+    try {
+      if (browser.commands && browser.commands.getAll) {
+        const cmds = await browser.commands.getAll();
+        const cmd = (cmds || []).find(
+          (c) =>
+            c.name === "_execute_browser_action" ||
+            c.name === "_execute_action"
+        );
+        if (cmd && cmd.shortcut) {
+          label = formatShortcutLabel(cmd.shortcut);
+        }
+      }
+    } catch (_) {
+      // keep default
+    }
+    cachedShortcutLabel = label;
+    return label;
+  }
+
+  async function updateShortcutTip() {
+    const label = await getOpenShortcutLabel();
+    if (shortcutLabelEl) shortcutLabelEl.textContent = label;
+  }
+
+  function hideSpeechBubble() {
+    if (speechBubble) speechBubble.hidden = true;
+  }
+
+  function showSpeechBubble(message) {
+    if (!speechBubble || !speechBubbleText) return;
+    speechBubbleText.textContent = message;
+    speechBubble.hidden = false;
+  }
+
+  async function maybeShowMascotTip() {
+    try {
+      const stored = await browser.storage.local.get("popupOpenCount");
+      const next = (stored.popupOpenCount || 0) + 1;
+      await browser.storage.local.set({ popupOpenCount: next });
+
+      if (SPEECH_BUBBLE_OPENS.has(next)) {
+        const msg =
+          SPEECH_MESSAGES[next] ||
+          "Psst — try the ☰ menu on the right. This extension does more stuff!";
+        // Slight delay so the list can paint first
+        setTimeout(() => showSpeechBubble(msg), 400);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  if (speechBubbleDismiss) {
+    speechBubbleDismiss.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hideSpeechBubble();
+    });
+  }
+
+  // --- Unload / duplicate helpers (tabs.discard / remove) ---
+
+  async function getTabLoadStats() {
+    const tabs = await browser.tabs.query({});
+    return Core.countTabLoadStats(tabs);
+  }
+
+  function setMemBarVisible(show) {
+    if (!memBar) return;
+    memBar.hidden = !show;
+  }
+
+  /** Tab load counts (Firefox does not expose process RAM to add-ons). */
+  async function refreshMemBar(extra = null) {
+    if (!memStatsEl) return;
+    setMemBarVisible(true);
+    try {
+      const stats = await getTabLoadStats();
+      while (memStatsEl.firstChild) {
+        memStatsEl.removeChild(memStatsEl.firstChild);
+      }
+
+      const appendStrongPair = (label, value) => {
+        memStatsEl.appendChild(document.createTextNode(label));
+        const strong = document.createElement("strong");
+        strong.textContent = String(value);
+        memStatsEl.appendChild(strong);
+      };
+
+      appendStrongPair("Loaded: ", stats.loaded);
+      memStatsEl.appendChild(document.createTextNode(" · "));
+      appendStrongPair("Unloaded: ", stats.discarded);
+      memStatsEl.appendChild(document.createTextNode(" · "));
+      appendStrongPair("Total: ", stats.total);
+
+      if (extra && typeof extra.unloaded === "number") {
+        memStatsEl.appendChild(document.createTextNode(" · "));
+        const delta = document.createElement("span");
+        delta.className = "mem-delta";
+        delta.textContent =
+          "just unloaded " +
+          extra.unloaded +
+          " tab" +
+          (extra.unloaded === 1 ? "" : "s");
+        memStatsEl.appendChild(delta);
+        memBarPinned = true;
+      }
+    } catch (err) {
+      memStatsEl.textContent = "Could not read tab stats";
+    }
+  }
+
+  async function discardInChunks(tabIds, chunkSize = 80) {
+    let discarded = 0;
+    for (let i = 0; i < tabIds.length; i += chunkSize) {
+      const chunk = tabIds.slice(i, i + chunkSize);
+      try {
+        await browser.tabs.discard(chunk);
+        discarded += chunk.length;
+      } catch (err) {
+        // Some tabs cannot be discarded; try one-by-one for the chunk
+        for (const id of chunk) {
+          try {
+            await browser.tabs.discard(id);
+            discarded += 1;
+          } catch (_) {
+            // skip
+          }
+        }
+      }
+    }
+    return discarded;
+  }
+
+  /** Unload tabs currently shown in the table (search/filters). Empty search = all. */
+  async function countUnloadListed() {
+    const [current] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const listedIds = filteredTabEntries.map(([, tab]) => tab.id);
+    const tabs = await browser.tabs.query({});
+    const keepId = current ? current.id : null;
+    const ids = Core.selectUnloadListedIds(tabs, listedIds, keepId);
+    return { count: ids.length, ids, keptId: keepId };
+  }
+
+  async function unloadListedTabs() {
+    const { ids } = await countUnloadListed();
+    const unloaded = await discardInChunks(ids);
+    return { unloaded };
+  }
+
+  async function unloadInWindow(windowId) {
+    const tabs = await browser.tabs.query({ windowId });
+    const ids = Core.selectUnloadInWindowIds(tabs);
+    const unloaded = await discardInChunks(ids);
+    return { unloaded, windowId };
+  }
+
+  async function analyzeDuplicates() {
+    const tabs = await browser.tabs.query({});
+    return Core.analyzeDuplicates(tabs, tabInfoList);
+  }
+
+  async function updateUnloadMenuSummaries() {
+    const unloadAllSummary = document.getElementById("unload-all-summary");
+    if (!unloadAllSummary) return;
+    try {
+      unloadAllSummary.textContent = "Counting tabs…";
+      const { count } = await countUnloadListed();
+      const filtered = filteredTabEntries.length;
+      const hasFilter =
+        !!(searchInput && searchInput.value) || showOnlyAudible;
+
+      if (count === 0) {
+        unloadAllSummary.textContent = hasFilter
+          ? "Nothing in the current list can be unloaded"
+          : "Nothing to unload right now";
+      } else if (hasFilter) {
+        unloadAllSummary.textContent =
+          count +
+          " of " +
+          filtered +
+          " listed tab" +
+          (filtered === 1 ? "" : "s") +
+          " will be unloaded";
+      } else {
+        unloadAllSummary.textContent =
+          count +
+          " tab" +
+          (count === 1 ? "" : "s") +
+          " will be unloaded";
+      }
+    } catch (err) {
+      unloadAllSummary.textContent = "Could not count tabs";
+    }
+  }
+
+  async function updateDuplicatesMenu() {
+    if (!dupesSummary && !closeDuplicatesBtn) return;
+    try {
+      if (dupesSummary) {
+        dupesSummary.textContent = "Checking duplicates…";
+        dupesSummary.classList.remove("has-dupes");
+      }
+      if (closeDuplicatesBtn) closeDuplicatesBtn.disabled = true;
+
+      lastDupesAnalysis = await analyzeDuplicates();
+      const { count, groups } = lastDupesAnalysis;
+
+      if (dupesSummary) {
+        if (count === 0) {
+          dupesSummary.textContent = "No duplicate tabs found";
+          dupesSummary.classList.remove("has-dupes");
+        } else {
+          dupesSummary.textContent =
+            count +
+            " duplicate tab" +
+            (count === 1 ? "" : "s") +
+            " can be closed (" +
+            groups +
+            " URL" +
+            (groups === 1 ? "" : "s") +
+            ")";
+          dupesSummary.classList.add("has-dupes");
+        }
+      }
+      if (closeDuplicatesBtn) {
+        closeDuplicatesBtn.disabled = count === 0;
+      }
+    } catch (err) {
+      console.error("Duplicate analysis failed:", err);
+      lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
+      if (dupesSummary) {
+        dupesSummary.textContent = "Could not check duplicates";
+        dupesSummary.classList.remove("has-dupes");
+      }
+      if (closeDuplicatesBtn) closeDuplicatesBtn.disabled = true;
+    }
+  }
+
+  async function closeDuplicateTabs() {
+    // Re-analyze so the list is fresh (tabs may have changed)
+    const analysis = await analyzeDuplicates();
+    lastDupesAnalysis = analysis;
+    if (!analysis.toCloseIds.length) {
+      return { closed: 0 };
+    }
+
+    let closed = 0;
+    const chunkSize = 50;
+    for (let i = 0; i < analysis.toCloseIds.length; i += chunkSize) {
+      const chunk = analysis.toCloseIds.slice(i, i + chunkSize);
+      try {
+        await browser.tabs.remove(chunk);
+        closed += chunk.length;
+      } catch (err) {
+        for (const id of chunk) {
+          try {
+            await browser.tabs.remove(id);
+            closed += 1;
+          } catch (_) {
+            // skip
+          }
+        }
+      }
+    }
+    return { closed };
+  }
+
+  async function reloadTabListFromBrowser() {
+    const direct = await loadTabsDirectly();
+    tabInfoList = direct.tabInfoList || {};
+    lastMeta = direct.meta || {};
+    loadError = null;
+    applyFilters();
+    renderTable();
+  }
+
+  function setMenuOpen(open) {
+    if (!actionsMenu || !menuBtn) return;
+    actionsMenu.hidden = !open;
+    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      hideSpeechBubble();
+      refreshMemBar();
+      updateUnloadMenuSummaries();
+      updateDuplicatesMenu();
+      updateShortcutTip();
+    } else if (!memBarPinned) {
+      setMemBarVisible(false);
+    }
+  }
+
+  function setWindowPickerOpen(open) {
+    if (!windowPicker) return;
+    windowPicker.hidden = !open;
+  }
+
+  async function showWindowPicker() {
+    if (!windowPickerList) return;
+    setMenuOpen(false);
+
+    while (windowPickerList.firstChild) {
+      windowPickerList.removeChild(windowPickerList.firstChild);
+    }
+
+    const [currentWin, windows, allTabs] = await Promise.all([
+      browser.windows.getCurrent(),
+      browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
+      browser.tabs.query({}),
+    ]);
+
+    const tabsByWindow = {};
+    for (const tab of allTabs) {
+      if (!tabsByWindow[tab.windowId]) tabsByWindow[tab.windowId] = [];
+      tabsByWindow[tab.windowId].push(tab);
+    }
+
+    const rows = Core.buildWindowUnloadRows(
+      windows,
+      tabsByWindow,
+      currentWin && currentWin.id
+    );
+
+    rows.forEach(({ win, tabs, active, loaded, unloadable, isCurrent, label }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "window-picker-item";
+      if (isCurrent) {
+        btn.classList.add("is-current");
+      }
+
+      const title = document.createElement("span");
+      title.className = "window-picker-item-title";
+      title.textContent = label;
+      title.title = (win && win.title) || label;
+
+      const meta = document.createElement("span");
+      meta.className = "window-picker-item-meta";
+      meta.textContent =
+        unloadable +
+        " will unload · " +
+        tabs.length +
+        " tabs total · " +
+        loaded +
+        " loaded now";
+
+      btn.appendChild(title);
+      btn.appendChild(meta);
+
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const result = await unloadInWindow(win.id);
+          setWindowPickerOpen(false);
+          await reloadTabListFromBrowser();
+          await refreshMemBar({ unloaded: result.unloaded });
+        } catch (err) {
+          console.error("Unload window failed:", err);
+          btn.disabled = false;
+          if (memStatsEl) {
+            memStatsEl.textContent = "Unload failed: " + err;
+          }
+        }
+      });
+
+      windowPickerList.appendChild(btn);
+    });
+
+    setWindowPickerOpen(true);
+  }
+
+  if (menuBtn && actionsMenu) {
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setMenuOpen(actionsMenu.hidden);
+    });
+
+    actionsMenu.addEventListener("click", async (e) => {
+      const item = e.target.closest("[data-action]");
+      if (!item) return;
+      const action = item.getAttribute("data-action");
+
+      if (action === "unload-window") {
+        try {
+          await showWindowPicker();
+        } catch (err) {
+          console.error(err);
+          if (memStatsEl) memStatsEl.textContent = "Could not list windows";
+        }
+        return;
+      }
+
+      if (action === "unload-listed") {
+        item.disabled = true;
+        setMenuOpen(false);
+        try {
+          const result = await unloadListedTabs();
+          await reloadTabListFromBrowser();
+          await refreshMemBar({ unloaded: result.unloaded });
+        } catch (err) {
+          console.error("Unload listed tabs failed:", err);
+          if (memStatsEl) {
+            memStatsEl.textContent = "Unload failed: " + err;
+          }
+        } finally {
+          item.disabled = false;
+        }
+        return;
+      }
+
+      if (action === "close-duplicates") {
+        if (!lastDupesAnalysis.count) return;
+        const n = lastDupesAnalysis.count;
+        const ok = confirm(
+          "Close " +
+            n +
+            " duplicate tab" +
+            (n === 1 ? "" : "s") +
+            "?\n\nFor each URL, we keep the tab you used most recently and close older copies. Pinned and active tabs are always kept."
+        );
+        if (!ok) return;
+
+        item.disabled = true;
+        setMenuOpen(false);
+        try {
+          const result = await closeDuplicateTabs();
+          await reloadTabListFromBrowser();
+          setMemBarVisible(true);
+          memBarPinned = true;
+          if (memStatsEl) {
+            memStatsEl.textContent =
+              "Closed " + result.closed + " duplicate tab" + (result.closed === 1 ? "" : "s");
+          }
+          await refreshMemBar();
+          if (memStatsEl && result.closed) {
+            // refreshMemBar rebuilds stats; append close note
+            memStatsEl.appendChild(document.createTextNode(" · "));
+            const delta = document.createElement("span");
+            delta.className = "mem-delta";
+            delta.textContent = "closed " + result.closed + " duplicates";
+            memStatsEl.appendChild(delta);
+          }
+        } catch (err) {
+          console.error("Close duplicates failed:", err);
+          if (memStatsEl) {
+            setMemBarVisible(true);
+            memStatsEl.textContent = "Close duplicates failed: " + err;
+          }
+        } finally {
+          item.disabled = false;
+        }
+        return;
+      }
+
+      if (action === "donate") {
+        setMenuOpen(false);
+        browser.tabs.create({ url: KOFI_URL });
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!actionsMenu.hidden) {
+        const wrap = e.target.closest(".header-menu-wrap");
+        if (!wrap) setMenuOpen(false);
+      }
+    });
+  }
+
+  if (windowPickerCancel) {
+    windowPickerCancel.addEventListener("click", () => {
+      setWindowPickerOpen(false);
     });
   }
 
@@ -71,6 +641,174 @@ document.addEventListener("DOMContentLoaded", function () {
   let sortOrder = 1;
   let showOnlyAudible = false;
   let personalBest = 0;
+  let loadError = null;
+  let lastMeta = {};
+  let debugMode = false;
+  let debugPanelVisible = false;
+
+  async function refreshDebugOpenCount() {
+    try {
+      const stored = await browser.storage.local.get("popupOpenCount");
+      const n = stored.popupOpenCount || 0;
+      if (debugOpenCountEl) debugOpenCountEl.textContent = String(n);
+      if (debugOpenCountInput && document.activeElement !== debugOpenCountInput) {
+        debugOpenCountInput.value = String(n);
+      }
+      return n;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  async function setPopupOpenCount(value) {
+    const n = Math.max(0, Math.floor(Number(value)) || 0);
+    await browser.storage.local.set({ popupOpenCount: n });
+    await refreshDebugOpenCount();
+    setDebugStatus("popupOpenCount = " + n + " (tips at 2, 6, 14)");
+    return n;
+  }
+
+  async function forceSpeechTip(openNumber) {
+    await setPopupOpenCount(openNumber);
+    const msg =
+      SPEECH_MESSAGES[openNumber] ||
+      "Psst — try the ☰ menu on the right. This extension does more stuff!";
+    showSpeechBubble(msg);
+    setDebugStatus("Forced tip for open #" + openNumber);
+  }
+
+  function showDebugPanel(show) {
+    debugPanelVisible = !!show;
+    updateDebugPanelVisibility();
+    if (show) {
+      refreshDebugOpenCount();
+      setDebugStatus(
+        "tracked=" +
+          Object.keys(tabInfoList).length +
+          (lastMeta.openTabs != null ? " open=" + lastMeta.openTabs : "") +
+          (lastMeta.source ? " " + lastMeta.source : "")
+      );
+    }
+  }
+
+  if (debugOpenCountSet) {
+    debugOpenCountSet.addEventListener("click", async () => {
+      const raw = debugOpenCountInput ? debugOpenCountInput.value : "0";
+      await setPopupOpenCount(raw);
+    });
+  }
+
+  if (debugOpenCountInput) {
+    debugOpenCountInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        await setPopupOpenCount(debugOpenCountInput.value);
+      }
+    });
+  }
+
+  if (debugTip2) {
+    debugTip2.addEventListener("click", () => forceSpeechTip(2));
+  }
+  if (debugTip6) {
+    debugTip6.addEventListener("click", () => forceSpeechTip(6));
+  }
+  if (debugTip14) {
+    debugTip14.addEventListener("click", () => forceSpeechTip(14));
+  }
+
+  // Hidden entry: four rapid clicks on the logo (left icon + title) toggles debug.
+  // Manual counter — e.detail is unreliable for 4+ clicks in some browsers.
+  const brandEl = document.querySelector(".brand");
+  if (brandEl) {
+    let brandClicks = 0;
+    let brandClickTimer = null;
+    const BRAND_CLICKS_NEEDED = 4;
+    const BRAND_CLICK_WINDOW_MS = 1200;
+
+    brandEl.addEventListener("click", (e) => {
+      brandClicks += 1;
+      if (brandClickTimer) clearTimeout(brandClickTimer);
+      brandClickTimer = setTimeout(() => {
+        brandClicks = 0;
+      }, BRAND_CLICK_WINDOW_MS);
+
+      if (brandClicks >= BRAND_CLICKS_NEEDED) {
+        brandClicks = 0;
+        clearTimeout(brandClickTimer);
+        brandClickTimer = null;
+        e.preventDefault();
+        showDebugPanel(!debugPanelVisible);
+      }
+    });
+  }
+
+  if (debugModeCheckbox) {
+    debugModeCheckbox.addEventListener("change", async () => {
+      debugMode = debugModeCheckbox.checked;
+      try {
+        await browser.runtime.sendMessage({
+          type: "setDebugMode",
+          enabled: debugMode,
+        });
+        await browser.storage.local.set({ debugMode });
+        setDebugStatus(debugMode ? "Debug on — leave on while reproducing issues" : "Debug off");
+      } catch (err) {
+        setDebugStatus("Failed to set debug: " + err);
+      }
+    });
+  }
+
+  if (debugCopyBtn) {
+    debugCopyBtn.addEventListener("click", async () => {
+      try {
+        let reportPart = {};
+        try {
+          const report = await browser.runtime.sendMessage({ type: "getDebugReport" });
+          reportPart = report && report.report ? report.report : report || {};
+        } catch (bgErr) {
+          reportPart = { backgroundError: String(bgErr) };
+        }
+        const payload = {
+          ...reportPart,
+          popup: {
+            visibleCount: filteredTabEntries.length,
+            trackedCount: Object.keys(tabInfoList).length,
+            search: searchInput.value,
+            showOnlyAudible,
+            sortField,
+            sortOrder,
+            loadError,
+            lastMeta,
+            popupOpenCount: debugOpenCountEl
+              ? debugOpenCountEl.textContent
+              : undefined,
+          },
+        };
+        const text = JSON.stringify(payload, null, 2);
+        await navigator.clipboard.writeText(text);
+        setDebugStatus("Logs copied to clipboard");
+      } catch (err) {
+        setDebugStatus("Copy failed: " + err);
+      }
+    });
+  }
+
+  if (debugHideBtn) {
+    debugHideBtn.addEventListener("click", () => {
+      showDebugPanel(false);
+    });
+  }
+
+  function updateDebugPanelVisibility() {
+    if (!debugPanel) return;
+    // Panel only opens via four logo clicks (or Hide). debugMode is logging only.
+    debugPanel.hidden = !debugPanelVisible;
+  }
+
+  function setDebugStatus(text) {
+    if (debugStatus) debugStatus.textContent = text || "";
+  }
 
   // Restore previous search + audio filter + sort state
   (async () => {
@@ -80,6 +818,7 @@ document.addEventListener("DOMContentLoaded", function () {
         "popupShowOnlyAudible",
         "popupSortField",
         "popupSortOrder",
+        "debugMode",
       ]);
 
       if (result.popupSearch) {
@@ -94,26 +833,53 @@ document.addEventListener("DOMContentLoaded", function () {
         sortOrder = result.popupSortOrder || 1;
       }
 
+      debugMode = !!result.debugMode;
+      if (debugModeCheckbox) debugModeCheckbox.checked = debugMode;
+      debugPanelVisible = false;
+      updateDebugPanelVisibility();
+
       // Load personal best
       const bestResult = await browser.storage.local.get("personalBest");
       personalBest = bestResult.personalBest || 0;
       updatePersonalBestDisplay();
 
-      const responseTabInfoList = await browser.runtime.sendMessage("getTabInfo");
-      tabInfoList = responseTabInfoList || {};
+      // Primary path: query tabs in the popup (works even if background is stuck
+      // after an extension reload — no Firefox restart needed).
+      const direct = await loadTabsDirectly();
+      tabInfoList = direct.tabInfoList || {};
+      loadError = null;
+      lastMeta = direct.meta || {};
+
+      if (debugMode) {
+        setDebugStatus(
+          "ok tracked=" +
+            Object.keys(tabInfoList).length +
+            (lastMeta.openTabs != null ? " open=" + lastMeta.openTabs : "") +
+            (lastMeta.ms != null ? " " + lastMeta.ms + "ms" : "") +
+            " " +
+            (lastMeta.source || "")
+        );
+      }
 
       applyFilters();
       renderTable();
       updateSortIndicators();
+      updateShortcutTip();
+      maybeShowMascotTip();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
-      searchInput.focus();
-      searchInput.select();
+      // Defer focus slightly so stylesheets can settle (reduces FOUC/layout warnings).
+      requestAnimationFrame(() => {
+        searchInput.focus();
+        searchInput.select();
+      });
     } catch (err) {
       console.error("Popup init failed:", err);
-      // Fallback so UI still appears (empty table is better than blank)
+      loadError = String(err && err.message ? err.message : err);
+      tabInfoList = {};
       applyFilters();
       renderTable();
+      if (debugMode) setDebugStatus("Popup init failed: " + loadError);
     }
   })();
 
@@ -151,6 +917,10 @@ document.addEventListener("DOMContentLoaded", function () {
     header.addEventListener("click", handleTableHeaderClick);
   });
 
+  // Cancel in-flight chunked renders when filters/sort change
+  let renderGeneration = 0;
+  const RENDER_CHUNK_SIZE = 60;
+
   function createTabRow(tabKey, tabInfo) {
     const row = document.createElement("tr");
 
@@ -161,7 +931,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const actionsCell = document.createElement("td");
 
     const switchButton = document.createElement("button");
-    switchButton.textContent = "Switch";
+    switchButton.textContent = "↗ Switch";
     switchButton.classList.add("action-button");
     switchButton.onclick = (e) => {
       e.stopPropagation();
@@ -170,7 +940,7 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsCell.appendChild(switchButton);
 
     const closeButton = document.createElement("button");
-    closeButton.textContent = "Close";
+    closeButton.textContent = "✕ Close";
     closeButton.classList.add("action-button");
     closeButton.onclick = async (e) => {
       e.stopPropagation();
@@ -191,12 +961,18 @@ document.addEventListener("DOMContentLoaded", function () {
     // Date cells (Last Opened first)
     const lastDate = document.createElement("td");
     lastDate.classList.add("col-date");
-    lastDate.textContent = formatShortDate(tabInfo.lastOpenedTs, tabInfo.lastOpened || "");
+    lastDate.textContent = Core.formatShortDate(
+      tabInfo.lastOpenedTs,
+      tabInfo.lastOpened || ""
+    );
     row.appendChild(lastDate);
 
     const firstDate = document.createElement("td");
     firstDate.classList.add("col-date");
-    firstDate.textContent = formatShortDate(tabInfo.firstOpenedTs, tabInfo.firstOpened || "");
+    firstDate.textContent = Core.formatShortDate(
+      tabInfo.firstOpenedTs,
+      tabInfo.firstOpened || ""
+    );
     row.appendChild(firstDate);
 
     // Tab info cell
@@ -206,11 +982,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const titleDiv = document.createElement("div");
     titleDiv.classList.add("tab-title");
 
-    if (tabInfo.favIconUrl) {
+    // Skip favicons for unloaded tabs — fewer image loads when most tabs are sleeping
+    if (tabInfo.favIconUrl && !tabInfo.discarded) {
       const favicon = document.createElement("img");
       favicon.classList.add("tab-favicon");
       favicon.src = tabInfo.favIconUrl;
       favicon.alt = "";
+      favicon.loading = "lazy";
       titleDiv.appendChild(favicon);
     }
 
@@ -220,6 +998,14 @@ document.addEventListener("DOMContentLoaded", function () {
       audioIcon.textContent = "♪";
       audioIcon.title = "This tab is playing audio";
       titleDiv.appendChild(audioIcon);
+    }
+
+    if (tabInfo.discarded) {
+      const sleepIcon = document.createElement("span");
+      sleepIcon.classList.add("discarded-indicator");
+      sleepIcon.textContent = "💤";
+      sleepIcon.title = "Unloaded — reloads when you open it";
+      titleDiv.appendChild(sleepIcon);
     }
 
     const titleText = document.createElement("span");
@@ -248,34 +1034,98 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  function updateEmptyState() {
+    if (!emptyState) return;
+
+    const total = Object.keys(tabInfoList).length;
+    const visible = filteredTabEntries.length;
+
+    if (visible > 0) {
+      emptyState.hidden = true;
+      emptyState.textContent = "";
+      emptyState.removeAttribute("data-kind");
+      return;
+    }
+
+    emptyState.hidden = false;
+
+    if (loadError) {
+      emptyState.dataset.kind = "error";
+      emptyState.textContent =
+        "Could not load tabs (" +
+        loadError +
+        "). Close the popup and open it again.";
+      return;
+    }
+
+    if (total > 0 && (searchInput.value || showOnlyAudible)) {
+      emptyState.dataset.kind = "filter";
+      emptyState.textContent = "";
+
+      const msg = document.createElement("span");
+      msg.textContent =
+        "No tabs match (" + total + " open). ";
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "empty-clear-filters";
+      clearBtn.textContent = "✕ Clear filters";
+      clearBtn.addEventListener("click", async () => {
+        searchInput.value = "";
+        showOnlyAudible = false;
+        if (audioFilterCheckbox) audioFilterCheckbox.checked = false;
+        await browser.storage.local.set({
+          popupSearch: "",
+          popupShowOnlyAudible: false,
+        });
+        applyFilters();
+        renderTable();
+      });
+
+      emptyState.appendChild(msg);
+      emptyState.appendChild(clearBtn);
+      return;
+    }
+
+    emptyState.dataset.kind = "empty";
+    emptyState.textContent =
+      "No tabs found. If tabs are open, reload this add-on or restart Firefox.";
+  }
+
   function renderTable() {
-    const countEl = document.getElementById('visible-tab-count');
+    const generation = ++renderGeneration;
+
+    const countEl = document.getElementById("visible-tab-count");
     if (countEl) {
       const newCount = filteredTabEntries.length;
-      if (countEl.textContent != newCount) {
-        // Fun pop animation - make the number "jump" bigger then settle.
-        // We disable transition, force it big (scale 1.3), force browser to notice
-        // the change (offsetWidth), swap the text, then re-enable the transition
-        // and go back to normal. The bouncy cubic-bezier gives it a little spring.
-        countEl.style.transition = 'none';
-        countEl.style.transform = 'scale(1.3)';
-        
-        // Force reflow so the scale(1.3) is committed before we start the transition
-        void countEl.offsetWidth;
-        
+      const prev = countEl.textContent;
+      if (prev != newCount) {
         countEl.textContent = newCount;
-        countEl.style.transition = 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        countEl.style.transform = 'scale(1)';
+        // Defer animation so we don't force layout before stylesheets settle
+        // (avoids "Layout was forced before the page was fully loaded" warnings).
+        requestAnimationFrame(() => {
+          if (generation !== renderGeneration) return;
+          countEl.style.transition = "none";
+          countEl.style.transform = "scale(1.15)";
+          requestAnimationFrame(() => {
+            if (generation !== renderGeneration) return;
+            countEl.style.transition =
+              "transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)";
+            countEl.style.transform = "scale(1)";
+          });
+        });
       }
     }
 
     // Check for new personal best based on actual open tabs (not filtered)
     checkForNewPersonalBest();
 
-    // === DATA-DRIVEN SCALE ===
-    // We scan ALL currently open tabs (tabInfoList) to find the real min and max
-    // lastOpenedTs that exist right now. These two numbers define the entire color scale
-    // for this render. No hard-coded "7 days" or similar.
+    // Safe clear (avoids any innerHTML usage/warnings)
+    while (tableBody.firstChild) {
+      tableBody.removeChild(tableBody.firstChild);
+    }
+
+    // Relative scale among currently open tabs: newest = no color → blue → orange
     let minTs = Infinity;
     let maxTs = 0;
     for (const key in tabInfoList) {
@@ -286,25 +1136,39 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
 
-    // === DEBUG (uncomment to see the actual numbers while the popup is open) ===
-    // console.log('Age scale this render - minTs:', minTs, 'maxTs:', maxTs, 'rangeHours:', (maxTs-minTs)/3600000);
-
-    // Safe clear (avoids any innerHTML usage/warnings)
-    while (tableBody.firstChild) {
-      tableBody.removeChild(tableBody.firstChild);
+    const total = filteredTabEntries.length;
+    if (total === 0) {
+      updateEmptyState();
+      return;
     }
 
-    const fragment = document.createDocumentFragment();
-    filteredTabEntries.forEach(([tabKey, tabInfo]) => {
-      const row = createTabRow(tabKey, tabInfo);
+    // Chunked paint so the popup feels responsive with 1k+ tabs
+    // (same idea as Tabhunter's list builder).
+    let index = 0;
+    function paintChunk() {
+      if (generation !== renderGeneration) return;
 
-      // Apply continuous age background using data-driven min/max
-      const bg = getAgeBackground(tabInfo.lastOpenedTs, minTs, maxTs);
-      if (bg) row.style.backgroundColor = bg;
+      const fragment = document.createDocumentFragment();
+      const end = Math.min(index + RENDER_CHUNK_SIZE, total);
+      for (; index < end; index++) {
+        const [tabKey, tabInfo] = filteredTabEntries[index];
+        const row = createTabRow(tabKey, tabInfo);
+        const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
+        if (age) {
+          row.style.backgroundColor = age.wash;
+        }
+        fragment.appendChild(row);
+      }
+      tableBody.appendChild(fragment);
 
-      fragment.appendChild(row);
-    });
-    tableBody.appendChild(fragment);
+      if (index < total) {
+        requestAnimationFrame(paintChunk);
+      } else {
+        updateEmptyState();
+      }
+    }
+
+    paintChunk();
   }
 
   function applyFilters() {
@@ -399,17 +1263,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const currentTotal = Object.keys(tabInfoList).length;
 
     if (currentTotal > personalBest) {
-      const oldBest = personalBest;
       personalBest = currentTotal;
 
       browser.storage.local.set({ personalBest: personalBest }).catch(() => {});
 
       updatePersonalBestDisplay();
-      showNewRecordCelebration(currentTotal, oldBest);
+      showNewRecordCelebration(currentTotal);
     }
   }
 
-  function showNewRecordCelebration(newBest, oldBest) {
+  function showNewRecordCelebration(newBest) {
     const bestContainer = document.getElementById("personal-best");
     if (!bestContainer) return;
 
@@ -450,6 +1313,11 @@ document.addEventListener("DOMContentLoaded", function () {
       bestContainer.style.transform = "scale(1)";
     }, 220);
 
+    // Big sessions only — fireworks for records above 100 tabs
+    if (newBest > 100) {
+      launchFireworks();
+    }
+
     // Revert after 5 seconds (gives people time to see + screenshot for bragging).
     // Clear and let updatePersonalBestDisplay() safely rebuild the normal "Best: N 🔥" content.
     setTimeout(() => {
@@ -460,5 +1328,75 @@ document.addEventListener("DOMContentLoaded", function () {
         updatePersonalBestDisplay();
       }
     }, 5000);
+  }
+
+  function launchFireworks() {
+    const root = document.createElement("div");
+    root.className = "fireworks-layer";
+    root.setAttribute("aria-hidden", "true");
+    document.body.appendChild(root);
+
+    const colors = [
+      "#ff6b00",
+      "#ff9f1c",
+      "#148dff",
+      "#35c7ff",
+      "#ff6fb1",
+      "#7c5cff",
+      "#ffe566",
+    ];
+
+    // A few staggered bursts across the popup
+    const bursts = [
+      { x: 22, y: 28, delay: 0 },
+      { x: 72, y: 22, delay: 180 },
+      { x: 48, y: 38, delay: 360 },
+      { x: 30, y: 55, delay: 520 },
+      { x: 68, y: 50, delay: 680 },
+    ];
+
+    bursts.forEach((burst) => {
+      setTimeout(() => {
+        if (!root.isConnected) return;
+        spawnFireworkBurst(root, burst.x, burst.y, colors);
+      }, burst.delay);
+    });
+
+    setTimeout(() => {
+      if (root.parentNode) root.parentNode.removeChild(root);
+    }, 3200);
+  }
+
+  function spawnFireworkBurst(layer, originXPercent, originYPercent, colors) {
+    const particleCount = 18;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() * 0.35);
+      const dist = 48 + Math.random() * 72;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const size = 3 + Math.random() * 4;
+      const color = colors[i % colors.length];
+      const duration = 700 + Math.random() * 500;
+
+      const p = document.createElement("span");
+      p.className = "firework-particle";
+      p.style.left = originXPercent + "%";
+      p.style.top = originYPercent + "%";
+      p.style.width = size + "px";
+      p.style.height = size + "px";
+      p.style.background = color;
+      p.style.boxShadow = "0 0 6px " + color;
+      p.style.setProperty("--fw-dx", dx + "px");
+      p.style.setProperty("--fw-dy", dy + "px");
+      p.style.animationDuration = duration + "ms";
+      layer.appendChild(p);
+    }
+
+    // Soft flash at the burst center
+    const flash = document.createElement("span");
+    flash.className = "firework-flash";
+    flash.style.left = originXPercent + "%";
+    flash.style.top = originYPercent + "%";
+    layer.appendChild(flash);
   }
 });
