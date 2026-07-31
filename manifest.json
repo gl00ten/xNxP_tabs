@@ -12,7 +12,7 @@
   },
   "permissions": ["tabs", "storage"],
   "browser_action": {
-    "default_title": "xNxP Tabs (Ctrl+Shift+U) — pin to keep icon visible",
+    "default_title": "xNxP Tabs (Ctrl+Shift+U), pin to keep icon visible",
     "default_popup": "popup.html"
   },
   "commands": {
