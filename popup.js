@@ -169,12 +169,26 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Hidden entry: four rapid clicks on the logo/brand toggles the debug panel.
-  // No tooltip or cursor change — intentional.
+  // Hidden entry: four rapid clicks on the logo (left icon + title) toggles debug.
+  // Manual counter — e.detail is unreliable for 4+ clicks in some browsers.
   const brandEl = document.querySelector(".brand");
   if (brandEl) {
+    let brandClicks = 0;
+    let brandClickTimer = null;
+    const BRAND_CLICKS_NEEDED = 4;
+    const BRAND_CLICK_WINDOW_MS = 1200;
+
     brandEl.addEventListener("click", (e) => {
-      if (e.detail === 4) {
+      brandClicks += 1;
+      if (brandClickTimer) clearTimeout(brandClickTimer);
+      brandClickTimer = setTimeout(() => {
+        brandClicks = 0;
+      }, BRAND_CLICK_WINDOW_MS);
+
+      if (brandClicks >= BRAND_CLICKS_NEEDED) {
+        brandClicks = 0;
+        clearTimeout(brandClickTimer);
+        brandClickTimer = null;
         e.preventDefault();
         showDebugPanel(!debugPanelVisible);
       }
