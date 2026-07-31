@@ -147,17 +147,23 @@ describe("formatWindowLabel", () => {
   });
 });
 
-describe("formatShortDate", () => {
-  it("formats a known timestamp", () => {
-    // 2020-01-15 10:05 local — only check shape YY.MM.DD HH:mm
+describe("formatShortDate / formatDateParts", () => {
+  it("formats a known timestamp as one line", () => {
     const s = core.formatShortDate(new Date(2020, 0, 15, 10, 5).getTime());
     assert.match(s, /^\d{2}\.\d{2}\.\d{2} \d{2}:\d{2}$/);
     assert.ok(s.startsWith("20.01.15"));
   });
 
+  it("splits date and time for two-line cells", () => {
+    const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime());
+    assert.equal(parts.date, "20.01.15");
+    assert.equal(parts.time, "10:05");
+  });
+
   it("returns fallback when missing", () => {
     assert.equal(core.formatShortDate(0, "n/a"), "n/a");
     assert.equal(core.formatShortDate(null, ""), "");
+    assert.deepEqual(core.formatDateParts(0, "n/a"), { date: "n/a", time: "" });
   });
 });
 
