@@ -1,5 +1,5 @@
 :root {
-  --bg: #eef7ff;
+  --bg: #f3f7fc;
   --panel: #ffffff;
 
   --blue: #148dff;
@@ -10,7 +10,8 @@
 
   --orange: #ff9f1c;
   --orange-2: #ff8c00;
-  --orange-soft: #fff1d6;
+  --orange-3: #ff6b00;
+  --orange-soft: #fff4e0;
 
   --purple: #7c5cff;
   --purple-soft: #a486ff;
@@ -20,10 +21,31 @@
   --muted: #4f6682;
   --faint: #7f96b0;
 
-  --border: #bdd8f2;
-  --row: #f8fbff;
-  --row-alt: #edf6ff;
-  --row-hover: #fff1d6;
+  /* Slightly warmer borders so the UI isn’t all cool blue */
+  --border: #d0dceb;
+  --border-warm: #f0d4a8;
+  --row: #fafcfe;
+  --row-alt: #f3f7fc;
+  --row-hover: #fff3e0;
+
+  /* Shared brand gradients — more orange on the right */
+  --grad-header: linear-gradient(
+    105deg,
+    #0a6fe8 0%,
+    #1a8cff 28%,
+    #35c7ff 48%,
+    #ffb347 78%,
+    #ff8c00 100%
+  );
+  --grad-thead: linear-gradient(
+    90deg,
+    #0a6fe8 0%,
+    #2aa0ff 35%,
+    #ffc05c 72%,
+    #ff8c00 100%
+  );
+  --grad-switch: linear-gradient(135deg, #0a6fe8 0%, #2aa0ff 45%, #ff9f1c 100%);
+  --grad-close: linear-gradient(135deg, #7c5cff 0%, #a486ff 55%, #ff8c00 100%);
 
   /* UI spacing - simplified */
   --space-xs: 4px;
@@ -48,9 +70,10 @@ body {
     sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at 6% 0%, rgba(255, 159, 28, 0.22), transparent 26%),
-    radial-gradient(circle at 94% 0%, rgba(20, 141, 255, 0.24), transparent 30%),
-    linear-gradient(135deg, #edf7ff 0%, #f7fbff 45%, #fff8ed 100%);
+    radial-gradient(circle at 8% -10%, rgba(255, 159, 28, 0.38), transparent 38%),
+    radial-gradient(circle at 92% 0%, rgba(20, 141, 255, 0.28), transparent 36%),
+    radial-gradient(circle at 70% 100%, rgba(255, 140, 0, 0.12), transparent 40%),
+    linear-gradient(145deg, #e8f4ff 0%, #f5f9ff 40%, #fff6e8 78%, #ffefd6 100%);
 }
 
 /* ---------- Header ---------- */
@@ -60,9 +83,11 @@ body {
   align-items: center;
   gap: var(--space-s);
   padding: var(--space-m);
-  background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
-  border-bottom: 3px solid var(--orange);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: var(--grad-header);
+  border-bottom: 3px solid #ffb347;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.15);
   overflow: visible;
   position: relative;
   z-index: 20;
@@ -229,14 +254,18 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 1px;
-  background: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(255, 248, 235, 0.82) 100%
+  );
   padding: 4px 10px;
   border-radius: 9999px;
   font-size: 11px;
   color: #183c5f;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 220, 160, 0.65);
 }
 
 .tab-count .current {
@@ -285,12 +314,13 @@ body {
   min-width: 0;
   box-sizing: border-box;
   padding: 8px 8px;
-  border: 2px solid #b8d9f6;
+  border: 2px solid rgba(255, 255, 255, 0.85);
   border-radius: 12px;
   outline: none;
   font-size: 14px;
   color: var(--text);
-  background: white;
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf3 100%);
+  box-shadow: 0 1px 4px rgba(10, 50, 100, 0.08);
 }
 
 #search-input::placeholder {
@@ -299,7 +329,7 @@ body {
 
 #search-input:focus {
   border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.18);
+  box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.28);
 }
 
 .audio-filter {
@@ -311,8 +341,8 @@ body {
   font-size: 10px;
   font-weight: 600;
   color: #183c5f;
-  background: #f0f6ff;
-  border: 1px solid #b8d9f6;
+  background: linear-gradient(180deg, #ffffff 0%, #fff6e8 100%);
+  border: 1px solid rgba(255, 200, 120, 0.75);
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
@@ -337,13 +367,18 @@ table {
   margin: var(--space-l) var(--space-m);
   table-layout: fixed;
   border-collapse: collapse;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-warm);
   border-radius: 12px;
   background: var(--panel);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 14px rgba(20, 80, 140, 0.08),
+    0 1px 0 rgba(255, 180, 80, 0.15);
+  overflow: hidden;
 }
 
-thead { background: linear-gradient(90deg, #0a6fe8 0%, #148dff 55%, #ffb347 100%); }
+thead {
+  background: var(--grad-thead);
+}
 
 th, td {
   padding: 6px 5px;
@@ -463,18 +498,18 @@ th.col-date {
   padding: 4px 6px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--blue-2), var(--blue));
+  background: var(--grad-switch);
   color: white;
   cursor: pointer;
   font-size: 10.5px;
   font-weight: 850;
-  box-shadow: 0 2px 7px rgba(20, 141, 255, 0.24);
+  box-shadow: 0 2px 7px rgba(20, 141, 255, 0.22);
 }
 
 .action-button:hover {
   transform: translateY(-1px);
-  background: linear-gradient(135deg, var(--orange-2), #ffb347);
-  box-shadow: 0 3px 9px rgba(255, 159, 28, 0.3);
+  background: linear-gradient(135deg, #ff8c00, #ffb347);
+  box-shadow: 0 3px 9px rgba(255, 159, 28, 0.35);
 }
 
 .action-button:active {
@@ -482,11 +517,11 @@ th.col-date {
 }
 
 .action-button:nth-child(2) {
-  background: linear-gradient(135deg, var(--purple), var(--purple-soft));
+  background: var(--grad-close);
 }
 
 .action-button:nth-child(2):hover {
-  background: linear-gradient(135deg, #ff6b35, var(--orange));
+  background: linear-gradient(135deg, #ff6b35, #ff9f1c);
 }
 
 /* ---------- Sort arrow ---------- */
@@ -527,7 +562,11 @@ th.col-date {
   height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.28),
+    rgba(255, 200, 100, 0.22)
+  );
   color: white;
   font-size: 16px;
   line-height: 1;
@@ -538,7 +577,11 @@ th.col-date {
 
 .menu-btn:hover,
 .menu-btn[aria-expanded="true"] {
-  background: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.4),
+    rgba(255, 180, 60, 0.35)
+  );
 }
 
 .actions-menu {
@@ -636,8 +679,8 @@ th.col-date {
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  background: #eef4fb;
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, #eef4fb 0%, #fff6e8 100%);
+  border-bottom: 1px solid var(--border-warm);
   font-size: 10.5px;
   color: var(--muted);
   line-height: 1.35;
