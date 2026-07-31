@@ -702,6 +702,11 @@ document.addEventListener("DOMContentLoaded", function () {
       bestContainer.style.transform = "scale(1)";
     }, 220);
 
+    // Big sessions only — fireworks for records above 100 tabs
+    if (newBest > 100) {
+      launchFireworks();
+    }
+
     // Revert after 5 seconds (gives people time to see + screenshot for bragging).
     // Clear and let updatePersonalBestDisplay() safely rebuild the normal "Best: N 🔥" content.
     setTimeout(() => {
@@ -712,5 +717,75 @@ document.addEventListener("DOMContentLoaded", function () {
         updatePersonalBestDisplay();
       }
     }, 5000);
+  }
+
+  function launchFireworks() {
+    const root = document.createElement("div");
+    root.className = "fireworks-layer";
+    root.setAttribute("aria-hidden", "true");
+    document.body.appendChild(root);
+
+    const colors = [
+      "#ff6b00",
+      "#ff9f1c",
+      "#148dff",
+      "#35c7ff",
+      "#ff6fb1",
+      "#7c5cff",
+      "#ffe566",
+    ];
+
+    // A few staggered bursts across the popup
+    const bursts = [
+      { x: 22, y: 28, delay: 0 },
+      { x: 72, y: 22, delay: 180 },
+      { x: 48, y: 38, delay: 360 },
+      { x: 30, y: 55, delay: 520 },
+      { x: 68, y: 50, delay: 680 },
+    ];
+
+    bursts.forEach((burst) => {
+      setTimeout(() => {
+        if (!root.isConnected) return;
+        spawnFireworkBurst(root, burst.x, burst.y, colors);
+      }, burst.delay);
+    });
+
+    setTimeout(() => {
+      if (root.parentNode) root.parentNode.removeChild(root);
+    }, 3200);
+  }
+
+  function spawnFireworkBurst(layer, originXPercent, originYPercent, colors) {
+    const particleCount = 18;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() * 0.35);
+      const dist = 48 + Math.random() * 72;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const size = 3 + Math.random() * 4;
+      const color = colors[i % colors.length];
+      const duration = 700 + Math.random() * 500;
+
+      const p = document.createElement("span");
+      p.className = "firework-particle";
+      p.style.left = originXPercent + "%";
+      p.style.top = originYPercent + "%";
+      p.style.width = size + "px";
+      p.style.height = size + "px";
+      p.style.background = color;
+      p.style.boxShadow = "0 0 6px " + color;
+      p.style.setProperty("--fw-dx", dx + "px");
+      p.style.setProperty("--fw-dy", dy + "px");
+      p.style.animationDuration = duration + "ms";
+      layer.appendChild(p);
+    }
+
+    // Soft flash at the burst center
+    const flash = document.createElement("span");
+    flash.className = "firework-flash";
+    flash.style.left = originXPercent + "%";
+    flash.style.top = originYPercent + "%";
+    layer.appendChild(flash);
   }
 });
