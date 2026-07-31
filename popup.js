@@ -169,15 +169,17 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Hidden entry: Ctrl+Shift+D (Cmd+Shift+D on Mac) toggles the debug panel.
-  // No UI affordance — intentional.
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "d" || e.key === "D")) {
-      e.preventDefault();
-      e.stopPropagation();
-      showDebugPanel(!debugPanelVisible);
-    }
-  });
+  // Hidden entry: four rapid clicks on the logo/brand toggles the debug panel.
+  // No tooltip or cursor change — intentional.
+  const brandEl = document.querySelector(".brand");
+  if (brandEl) {
+    brandEl.addEventListener("click", (e) => {
+      if (e.detail === 4) {
+        e.preventDefault();
+        showDebugPanel(!debugPanelVisible);
+      }
+    });
+  }
 
   if (debugModeCheckbox) {
     debugModeCheckbox.addEventListener("change", async () => {
@@ -235,15 +237,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateDebugPanelVisibility() {
     if (!debugPanel) return;
-    // Panel only opens via the secret shortcut (or Hide button closes it).
-    // debugMode controls logging only, not panel visibility.
-    if (debugPanelVisible) {
-      debugPanel.hidden = false;
-      debugPanel.removeAttribute("hidden");
-    } else {
-      debugPanel.hidden = true;
-      debugPanel.setAttribute("hidden", "");
-    }
+    // Panel only opens via four logo clicks (or Hide). debugMode is logging only.
+    debugPanel.hidden = !debugPanelVisible;
   }
 
   function setDebugStatus(text) {
@@ -657,17 +652,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const currentTotal = Object.keys(tabInfoList).length;
 
     if (currentTotal > personalBest) {
-      const oldBest = personalBest;
       personalBest = currentTotal;
 
       browser.storage.local.set({ personalBest: personalBest }).catch(() => {});
 
       updatePersonalBestDisplay();
-      showNewRecordCelebration(currentTotal, oldBest);
+      showNewRecordCelebration(currentTotal);
     }
   }
 
-  function showNewRecordCelebration(newBest, oldBest) {
+  function showNewRecordCelebration(newBest) {
     const bestContainer = document.getElementById("personal-best");
     if (!bestContainer) return;
 
