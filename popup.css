@@ -44,8 +44,8 @@
     #ffc05c 72%,
     #ff8c00 100%
   );
-  --grad-switch: linear-gradient(135deg, #0a6fe8 0%, #2aa0ff 45%, #ff9f1c 100%);
-  --grad-close: linear-gradient(135deg, #7c5cff 0%, #a486ff 55%, #ff8c00 100%);
+  --grad-switch: linear-gradient(180deg, #2aa0ff 0%, #0a6fe8 100%);
+  --grad-close: linear-gradient(180deg, #9b7cff 0%, #6a4de8 100%);
 
   /* UI spacing - simplified */
   --space-xs: 4px;
@@ -503,13 +503,13 @@ th.col-date {
   cursor: pointer;
   font-size: 10.5px;
   font-weight: 850;
-  box-shadow: 0 2px 7px rgba(20, 141, 255, 0.22);
+  box-shadow: 0 1px 4px rgba(10, 80, 180, 0.28);
 }
 
 .action-button:hover {
   transform: translateY(-1px);
-  background: linear-gradient(135deg, #ff8c00, #ffb347);
-  box-shadow: 0 3px 9px rgba(255, 159, 28, 0.35);
+  background: linear-gradient(180deg, #3aadff 0%, #148dff 100%);
+  box-shadow: 0 2px 8px rgba(20, 141, 255, 0.35);
 }
 
 .action-button:active {
@@ -518,10 +518,12 @@ th.col-date {
 
 .action-button:nth-child(2) {
   background: var(--grad-close);
+  box-shadow: 0 1px 4px rgba(100, 60, 200, 0.28);
 }
 
 .action-button:nth-child(2):hover {
-  background: linear-gradient(135deg, #ff6b35, #ff9f1c);
+  background: linear-gradient(180deg, #b08cff 0%, #7c5cff 100%);
+  box-shadow: 0 2px 8px rgba(124, 92, 255, 0.35);
 }
 
 /* ---------- Sort arrow ---------- */
