@@ -111,11 +111,103 @@ document.addEventListener("DOMContentLoaded", function () {
   const windowPickerCancel = document.getElementById("window-picker-cancel");
   const dupesSummary = document.getElementById("dupes-summary");
   const closeDuplicatesBtn = document.getElementById("close-duplicates-btn");
+  const shortcutLabelEl = document.getElementById("shortcut-label");
+  const speechBubble = document.getElementById("speech-bubble");
+  const speechBubbleText = document.getElementById("speech-bubble-text");
+  const speechBubbleDismiss = document.getElementById("speech-bubble-dismiss");
   // Stats bar only when using the ☰ menu / after an unload (not on every open)
   let memBarPinned = false;
   let lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
+  let cachedShortcutLabel = null;
 
   const KOFI_URL = "https://ko-fi.com/gl00ten";
+  // Mascot tips on these popup-open counts (1-based)
+  const SPEECH_BUBBLE_OPENS = new Set([2, 6, 14]);
+  const SPEECH_MESSAGES = {
+    2: "Psst — try the ☰ menu on the right. This extension does more stuff!",
+    6: "Hey! The ☰ menu has unload tools, duplicates, and more. Give it a peek!",
+    14: "Still exploring? ☰ on the right is packed — unload, clean dupes, and more!",
+  };
+
+  function defaultShortcutLabel() {
+    const isMac =
+      typeof navigator !== "undefined" &&
+      /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
+    return isMac ? "Cmd+Shift+U" : "Ctrl+Shift+U";
+  }
+
+  function formatShortcutLabel(raw) {
+    if (!raw) return defaultShortcutLabel();
+    return String(raw)
+      .replace(/MacCtrl/gi, "Ctrl")
+      .replace(/Command/gi, "Cmd")
+      .replace(/Control/gi, "Ctrl")
+      .replace(/Comma/gi, ",")
+      .replace(/\s*\+\s*/g, "+");
+  }
+
+  /** Real assigned shortcut from the browser, or manifest default. */
+  async function getOpenShortcutLabel() {
+    if (cachedShortcutLabel) return cachedShortcutLabel;
+    let label = defaultShortcutLabel();
+    try {
+      if (browser.commands && browser.commands.getAll) {
+        const cmds = await browser.commands.getAll();
+        const cmd = (cmds || []).find(
+          (c) =>
+            c.name === "_execute_browser_action" ||
+            c.name === "_execute_action"
+        );
+        if (cmd && cmd.shortcut) {
+          label = formatShortcutLabel(cmd.shortcut);
+        }
+      }
+    } catch (_) {
+      // keep default
+    }
+    cachedShortcutLabel = label;
+    return label;
+  }
+
+  async function updateShortcutTip() {
+    const label = await getOpenShortcutLabel();
+    if (shortcutLabelEl) shortcutLabelEl.textContent = label;
+  }
+
+  function hideSpeechBubble() {
+    if (speechBubble) speechBubble.hidden = true;
+  }
+
+  function showSpeechBubble(message) {
+    if (!speechBubble || !speechBubbleText) return;
+    speechBubbleText.textContent = message;
+    speechBubble.hidden = false;
+  }
+
+  async function maybeShowMascotTip() {
+    try {
+      const stored = await browser.storage.local.get("popupOpenCount");
+      const next = (stored.popupOpenCount || 0) + 1;
+      await browser.storage.local.set({ popupOpenCount: next });
+
+      if (SPEECH_BUBBLE_OPENS.has(next)) {
+        const msg =
+          SPEECH_MESSAGES[next] ||
+          "Psst — try the ☰ menu on the right. This extension does more stuff!";
+        // Slight delay so the list can paint first
+        setTimeout(() => showSpeechBubble(msg), 400);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  if (speechBubbleDismiss) {
+    speechBubbleDismiss.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hideSpeechBubble();
+    });
+  }
 
   // --- Unload / duplicate helpers (tabs.discard / remove) ---
 
@@ -342,9 +434,11 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsMenu.hidden = !open;
     menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
+      hideSpeechBubble();
       refreshMemBar();
       updateUnloadMenuSummaries();
       updateDuplicatesMenu();
+      updateShortcutTip();
     } else if (!memBarPinned) {
       setMemBarVisible(false);
     }
@@ -700,6 +794,8 @@ document.addEventListener("DOMContentLoaded", function () {
       applyFilters();
       renderTable();
       updateSortIndicators();
+      updateShortcutTip();
+      maybeShowMascotTip();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
       // Defer focus slightly so stylesheets can settle (reduces FOUC/layout warnings).

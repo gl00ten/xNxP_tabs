@@ -138,6 +138,8 @@ body {
   gap: 3px;
   flex-shrink: 0;
   width: 88px;
+  position: relative;
+  z-index: 25;
 }
 
 .brand-icon {
@@ -156,6 +158,84 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
   text-align: center;
+}
+
+/* Speech bubble from the brand mascot */
+.speech-bubble {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 4px;
+  width: min(220px, 52vw);
+  padding: 8px 22px 8px 10px;
+  border-radius: 12px;
+  background: #fffdf8;
+  border: 2px solid #ffb347;
+  box-shadow: 0 4px 14px rgba(16, 32, 51, 0.18);
+  color: var(--text);
+  z-index: 30;
+  animation: speech-pop 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.speech-bubble[hidden] {
+  display: none !important;
+}
+
+.speech-bubble::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 16px;
+  border-width: 7px 8px 7px 0;
+  border-style: solid;
+  border-color: transparent #ffb347 transparent transparent;
+}
+
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 17px;
+  border-width: 6px 7px 6px 0;
+  border-style: solid;
+  border-color: transparent #fffdf8 transparent transparent;
+}
+
+.speech-bubble-text {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #1a3048;
+}
+
+.speech-bubble-dismiss {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.speech-bubble-dismiss:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+@keyframes speech-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
 }
 
 .empty-state {
@@ -685,6 +765,20 @@ th.col-date {
 
 .actions-menu-dupes.has-dupes {
   color: #c45c00;
+}
+
+.actions-menu-tip {
+  padding: 6px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.actions-menu-tip strong {
+  color: var(--blue-2);
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 /* ---------- Memory / unload stats bar ---------- */

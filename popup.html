@@ -10,6 +10,15 @@
       <div class="brand">
         <img src="icons/icon128.png" alt="" class="brand-icon">
         <span class="brand-text">xNxP Tabs</span>
+        <div id="speech-bubble" class="speech-bubble" hidden role="status">
+          <p id="speech-bubble-text" class="speech-bubble-text"></p>
+          <button
+            type="button"
+            id="speech-bubble-dismiss"
+            class="speech-bubble-dismiss"
+            aria-label="Dismiss tip"
+          >×</button>
+        </div>
       </div>
       <input
         id="search-input"
@@ -86,6 +95,11 @@
               <span class="actions-menu-hint">buy me a coffee if this helps</span>
             </span>
           </button>
+          <div class="actions-menu-divider" role="separator"></div>
+          <div class="actions-menu-tip" id="shortcut-tip">
+            Tip: open this anytime with
+            <strong id="shortcut-label">Ctrl+Shift+U</strong>
+          </div>
         </div>
       </div>
     </div>
