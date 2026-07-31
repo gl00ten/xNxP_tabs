@@ -883,8 +883,61 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   })();
 
+  // Keyboard list navigation: Down/Up from search, Enter opens highlighted tab
+  let highlightIndex = -1;
+
+  function clearRowHighlight() {
+    const rows = tableBody.querySelectorAll("tr.row-highlight");
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].classList.remove("row-highlight");
+    }
+  }
+
+  function applyRowHighlight() {
+    clearRowHighlight();
+    if (highlightIndex < 0 || highlightIndex >= filteredTabEntries.length) {
+      return;
+    }
+    const rows = tableBody.children;
+    const row = rows[highlightIndex];
+    if (row) {
+      row.classList.add("row-highlight");
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function moveHighlight(delta) {
+    if (filteredTabEntries.length === 0) return;
+    if (highlightIndex < 0) {
+      highlightIndex = delta > 0 ? 0 : filteredTabEntries.length - 1;
+    } else {
+      highlightIndex += delta;
+      if (highlightIndex < 0) {
+        highlightIndex = -1;
+        clearRowHighlight();
+        return;
+      }
+      if (highlightIndex >= filteredTabEntries.length) {
+        highlightIndex = filteredTabEntries.length - 1;
+      }
+    }
+    applyRowHighlight();
+    // Chunked paint may not have this row yet — retry next frame
+    if (!tableBody.children[highlightIndex]) {
+      requestAnimationFrame(applyRowHighlight);
+    }
+  }
+
+  function activateHighlightedTab() {
+    if (filteredTabEntries.length === 0) return;
+    const idx = highlightIndex >= 0 ? highlightIndex : 0;
+    const entry = filteredTabEntries[idx];
+    if (entry) switchToTab(entry[1]);
+  }
+
   let searchDebounceTimer;
   searchInput.addEventListener("input", async () => {
+    highlightIndex = -1;
     await browser.storage.local.set({ popupSearch: searchInput.value });
 
     clearTimeout(searchDebounceTimer);
@@ -894,11 +947,26 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 120);
   });
 
-  // Pressing Enter in the search box switches to the first result
   searchInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && filteredTabEntries.length > 0) {
-      const [_, firstTab] = filteredTabEntries[0];
-      switchToTab(firstTab);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveHighlight(1);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveHighlight(-1);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      activateHighlightedTab();
+      return;
+    }
+    if (e.key === "Escape" && highlightIndex >= 0) {
+      e.preventDefault();
+      highlightIndex = -1;
+      clearRowHighlight();
     }
   });
 
@@ -921,8 +989,11 @@ document.addEventListener("DOMContentLoaded", function () {
   let renderGeneration = 0;
   const RENDER_CHUNK_SIZE = 60;
 
-  function createTabRow(tabKey, tabInfo) {
+  function createTabRow(tabKey, tabInfo, rowIndex) {
     const row = document.createElement("tr");
+    if (rowIndex === highlightIndex) {
+      row.classList.add("row-highlight");
+    }
 
     // Whole row click to switch
     row.onclick = () => switchToTab(tabInfo);
@@ -1148,7 +1219,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const total = filteredTabEntries.length;
+    if (highlightIndex >= total) {
+      highlightIndex = total > 0 ? total - 1 : -1;
+    }
     if (total === 0) {
+      highlightIndex = -1;
       updateEmptyState();
       return;
     }
@@ -1163,7 +1238,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const end = Math.min(index + RENDER_CHUNK_SIZE, total);
       for (; index < end; index++) {
         const [tabKey, tabInfo] = filteredTabEntries[index];
-        const row = createTabRow(tabKey, tabInfo);
+        const row = createTabRow(tabKey, tabInfo, index);
         const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
         if (age) {
           row.style.backgroundColor = age.wash;
@@ -1176,6 +1251,7 @@ document.addEventListener("DOMContentLoaded", function () {
         requestAnimationFrame(paintChunk);
       } else {
         updateEmptyState();
+        if (highlightIndex >= 0) applyRowHighlight();
       }
     }
 
