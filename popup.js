@@ -146,9 +146,9 @@ document.addEventListener("DOMContentLoaded", function () {
         memStatsEl.appendChild(strong);
       };
 
-      appendStrongPair("In memory: ", stats.loaded);
+      appendStrongPair("Loaded: ", stats.loaded);
       memStatsEl.appendChild(document.createTextNode(" · "));
-      appendStrongPair("Sleeping: ", stats.discarded);
+      appendStrongPair("Unloaded: ", stats.discarded);
       memStatsEl.appendChild(document.createTextNode(" · "));
       appendStrongPair("Total: ", stats.total);
 
@@ -156,7 +156,11 @@ document.addEventListener("DOMContentLoaded", function () {
         memStatsEl.appendChild(document.createTextNode(" · "));
         const delta = document.createElement("span");
         delta.className = "mem-delta";
-        delta.textContent = "just unloaded " + extra.unloaded + " from memory";
+        delta.textContent =
+          "just unloaded " +
+          extra.unloaded +
+          " tab" +
+          (extra.unloaded === 1 ? "" : "s");
         memStatsEl.appendChild(delta);
         memBarPinned = true;
       }
@@ -230,22 +234,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (count === 0) {
         unloadAllSummary.textContent = hasFilter
-          ? "No listed tabs can be unloaded (filters may hide them)"
-          : "No tabs to unload from memory";
+          ? "Nothing in the current list can be unloaded"
+          : "Nothing to unload right now";
       } else if (hasFilter) {
         unloadAllSummary.textContent =
           count +
-          " listed tab" +
-          (count === 1 ? "" : "s") +
-          " will be unloaded from memory (of " +
+          " of " +
           filtered +
-          " shown)";
+          " listed tab" +
+          (filtered === 1 ? "" : "s") +
+          " will be unloaded";
       } else {
         unloadAllSummary.textContent =
           count +
           " tab" +
           (count === 1 ? "" : "s") +
-          " will be unloaded from memory";
+          " will be unloaded";
       }
     } catch (err) {
       unloadAllSummary.textContent = "Could not count tabs";
@@ -394,11 +398,11 @@ document.addEventListener("DOMContentLoaded", function () {
       meta.className = "window-picker-item-meta";
       meta.textContent =
         unloadable +
-        " tabs will be unloaded from memory · " +
+        " will unload · " +
         tabs.length +
-        " tabs · " +
+        " tabs total · " +
         loaded +
-        " loaded";
+        " loaded now";
 
       btn.appendChild(title);
       btn.appendChild(meta);
@@ -472,7 +476,7 @@ document.addEventListener("DOMContentLoaded", function () {
             n +
             " duplicate tab" +
             (n === 1 ? "" : "s") +
-            "?\n\nKeeps the most recently used copy of each URL (by last opened). Older copies are closed. Pinned and active tabs are kept."
+            "?\n\nFor each URL, we keep the tab you used most recently and close older copies. Pinned and active tabs are always kept."
         );
         if (!ok) return;
 
@@ -828,7 +832,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const sleepIcon = document.createElement("span");
       sleepIcon.classList.add("discarded-indicator");
       sleepIcon.textContent = "💤";
-      sleepIcon.title = "Unloaded (sleeping — reloads when you open it)";
+      sleepIcon.title = "Unloaded — reloads when you open it";
       titleDiv.appendChild(sleepIcon);
     }
 
@@ -876,7 +880,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (loadError) {
       emptyState.dataset.kind = "error";
       emptyState.textContent =
-        "Could not load tabs (" + loadError + "). Try closing and reopening the popup.";
+        "Could not load tabs (" +
+        loadError +
+        "). Close the popup and open it again.";
       return;
     }
 
@@ -886,9 +892,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const msg = document.createElement("span");
       msg.textContent =
-        "No tabs match your filters (" +
-        total +
-        " open). ";
+        "No tabs match (" + total + " open). ";
 
       const clearBtn = document.createElement("button");
       clearBtn.type = "button";
@@ -913,7 +917,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     emptyState.dataset.kind = "empty";
     emptyState.textContent =
-      "No tabs found. If you have tabs open, remove and re-load this temporary add-on (about:debugging), or restart Firefox once.";
+      "No tabs found. If tabs are open, reload this add-on or restart Firefox.";
   }
 
   function renderTable() {
