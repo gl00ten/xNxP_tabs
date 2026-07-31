@@ -1,5 +1,44 @@
 let tabInfoList = {};
 
+const DEBUG_LOG_MAX = 80;
+let debugMode = false;
+let debugLogs = [];
+
+function logDebug(message, data = null) {
+  if (!debugMode) return;
+
+  const entry = {
+    t: new Date().toISOString(),
+    msg: message,
+    data: data == null ? null : sanitizeDebugData(data),
+  };
+
+  debugLogs.push(entry);
+  if (debugLogs.length > DEBUG_LOG_MAX) {
+    debugLogs = debugLogs.slice(-DEBUG_LOG_MAX);
+  }
+
+  try {
+    console.log("[xNxP Tabs]", message, data ?? "");
+  } catch (_) {
+    // ignore
+  }
+
+  // Fire-and-forget persist (best effort)
+  browser.storage.local.set({ debugLogs }).catch(() => {});
+}
+
+function sanitizeDebugData(data) {
+  try {
+    if (data instanceof Error) {
+      return { name: data.name, message: data.message, stack: data.stack };
+    }
+    return JSON.parse(JSON.stringify(data));
+  } catch (_) {
+    return String(data);
+  }
+}
+
 // Generate a stable key for each browser tab
 function generateTabKey(tabId) {
   return String(tabId);
@@ -90,6 +129,7 @@ function buildTabRecord(tab, previousRecord = null, options = {}) {
 
 async function syncActiveTabs() {
   const tabs = await browser.tabs.query({});
+  logDebug("syncActiveTabs query", { openTabs: tabs.length });
 
   const oldTabInfoList = tabInfoList || {};
   const oldRecordsByRestoreKey = {};
@@ -140,6 +180,8 @@ async function syncActiveTabs() {
   tabInfoList = newTabInfoList;
 
   await browser.storage.local.set({ tabInfoList: tabInfoList });
+  logDebug("syncActiveTabs saved", { tracked: Object.keys(tabInfoList).length });
+  return tabs.length;
 }
 
 // Update tab info when a tab changes or becomes active
@@ -173,7 +215,11 @@ async function updateTabInfo(tabId, changeInfo, tab) {
     forceLastOpened: changeInfo.active === true,
   });
 
-  await browser.storage.local.set({ tabInfoList: tabInfoList });
+  try {
+    await browser.storage.local.set({ tabInfoList: tabInfoList });
+  } catch (err) {
+    logDebug("updateTabInfo storage failed", err);
+  }
 }
 
 // Listener for onActivated event
@@ -183,6 +229,7 @@ async function onTabActivated(activeInfo) {
     await updateTabInfo(activeInfo.tabId, { active: true }, tab);
   } catch (err) {
     // Tab might have been closed
+    logDebug("onTabActivated failed", err);
   }
 }
 
@@ -192,7 +239,11 @@ async function onTabRemoved(tabId /*, removeInfo */) {
 
   if (tabInfoList[tabKey]) {
     delete tabInfoList[tabKey];
-    await browser.storage.local.set({ tabInfoList: tabInfoList });
+    try {
+      await browser.storage.local.set({ tabInfoList: tabInfoList });
+    } catch (err) {
+      logDebug("onTabRemoved storage failed", err);
+    }
   }
 }
 
@@ -235,7 +286,106 @@ async function onTabCreated(tab) {
     forceLastOpened: true,
   });
 
-  await browser.storage.local.set({ tabInfoList: tabInfoList });
+  try {
+    await browser.storage.local.set({ tabInfoList: tabInfoList });
+  } catch (err) {
+    logDebug("onTabCreated storage failed", err);
+  }
+}
+
+/**
+ * Build a live snapshot of open tabs. Prefers tabs.query as source of truth.
+ * Returns a structured response so the popup can distinguish empty vs error.
+ */
+async function handleGetTabInfo() {
+  const started = Date.now();
+
+  try {
+    // Prefer live query first so we never blank the UI on storage glitches.
+    const openCount = await syncActiveTabs();
+    const count = Object.keys(tabInfoList).length;
+    const response = {
+      ok: true,
+      tabInfoList,
+      meta: {
+        openTabs: openCount,
+        tracked: count,
+        ms: Date.now() - started,
+        debugMode,
+      },
+    };
+    logDebug("getTabInfo ok", response.meta);
+    return response;
+  } catch (err) {
+    logDebug("getTabInfo primary failed", err);
+
+    // Fallback: rebuild from tabs.query without full storage pipeline
+    try {
+      const tabs = await browser.tabs.query({});
+      const list = {};
+      for (const tab of tabs) {
+        const key = generateTabKey(tab.id);
+        list[key] = buildTabRecord(tab, tabInfoList[key] || null);
+      }
+      tabInfoList = list;
+      const response = {
+        ok: true,
+        tabInfoList,
+        meta: {
+          openTabs: tabs.length,
+          tracked: Object.keys(list).length,
+          ms: Date.now() - started,
+          fallback: true,
+          debugMode,
+        },
+      };
+      logDebug("getTabInfo fallback ok", response.meta);
+      return response;
+    } catch (err2) {
+      logDebug("getTabInfo fallback failed", err2);
+      return {
+        ok: false,
+        tabInfoList: {},
+        error: String(err2 && err2.message ? err2.message : err2),
+        meta: {
+          openTabs: 0,
+          tracked: 0,
+          ms: Date.now() - started,
+          debugMode,
+        },
+      };
+    }
+  }
+}
+
+async function handleSetDebugMode(enabled) {
+  debugMode = !!enabled;
+  await browser.storage.local.set({ debugMode });
+  logDebug("debugMode set", { debugMode });
+  return { ok: true, debugMode };
+}
+
+async function handleGetDebugReport() {
+  let storageKeys = [];
+  try {
+    const all = await browser.storage.local.get(null);
+    storageKeys = Object.keys(all || {});
+  } catch (_) {
+    // ignore
+  }
+
+  return {
+    ok: true,
+    report: {
+      generatedAt: new Date().toISOString(),
+      debugMode,
+      trackedTabs: Object.keys(tabInfoList).length,
+      storageKeys,
+      logs: debugLogs.slice(),
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      manifestVersion: 2,
+    },
+  };
 }
 
 // Register listeners as early as possible so we don't miss events
@@ -244,41 +394,49 @@ browser.tabs.onCreated.addListener(onTabCreated);
 browser.tabs.onUpdated.addListener(updateTabInfo);
 browser.tabs.onActivated.addListener(onTabActivated);
 browser.tabs.onRemoved.addListener(onTabRemoved);
-browser.runtime.onMessage.addListener(onMessageReceived);
+
+// Return a Promise from the listener (polyfill + Firefox event pages handle this
+// more reliably than sendResponse after long async work).
+browser.runtime.onMessage.addListener((request) => {
+  const type = typeof request === "string" ? request : request && request.type;
+
+  if (type === "getTabInfo") {
+    return handleGetTabInfo();
+  }
+  if (type === "setDebugMode") {
+    return handleSetDebugMode(!!(request && request.enabled));
+  }
+  if (type === "getDebugReport") {
+    return handleGetDebugReport();
+  }
+
+  return Promise.resolve({ ok: false, error: "Unknown request" });
+});
 
 // Load stored data, then sync with open tabs
 (async () => {
   try {
-    const result = await browser.storage.local.get("tabInfoList");
+    const result = await browser.storage.local.get([
+      "tabInfoList",
+      "debugMode",
+      "debugLogs",
+    ]);
     tabInfoList = result.tabInfoList || {};
+    debugMode = !!result.debugMode;
+    debugLogs = Array.isArray(result.debugLogs) ? result.debugLogs.slice(-DEBUG_LOG_MAX) : [];
 
     backfillTimestamps(tabInfoList);
+    logDebug("background init start", {
+      stored: Object.keys(tabInfoList).length,
+      debugMode,
+    });
 
     await syncActiveTabs();
+    logDebug("background init done", {
+      tracked: Object.keys(tabInfoList).length,
+    });
   } catch (err) {
     console.error("Background initial load failed:", err);
+    logDebug("background init failed", err);
   }
 })();
-
-// Listener for messages from the popup
-function onMessageReceived(request, sender, sendResponse) {
-  // Legacy string message
-  if (request === "getTabInfo") {
-    (async () => {
-      const result = await browser.storage.local.get("tabInfoList");
-      tabInfoList = result.tabInfoList || {};
-
-      backfillTimestamps(tabInfoList);
-
-      await syncActiveTabs();
-      sendResponse(tabInfoList);
-    })();
-    return true;
-  }
-
-  sendResponse({ error: "Unknown request" });
-  return false;
-}
-
-// Listeners are registered early (before the async init) so we catch
-// onCreated events for tabs being restored by the browser.

@@ -46,6 +46,17 @@
       <tbody id="table-body"></tbody>
     </table>
 
+    <div id="empty-state" class="empty-state" hidden></div>
+
+    <div id="debug-panel" class="debug-panel" hidden>
+      <label class="debug-toggle" title="Log extension internals for troubleshooting">
+        <input type="checkbox" id="debug-mode-checkbox" />
+        <span>Debug</span>
+      </label>
+      <button type="button" id="debug-copy-btn" class="debug-copy-btn">Copy logs</button>
+      <span id="debug-status" class="debug-status"></span>
+    </div>
+
     <button
       type="button"
       id="kofi-link"

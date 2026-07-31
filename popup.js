@@ -9,32 +9,17 @@ function getAgeBackground(timestamp, minTs, maxTs) {
   //   t = 0  → this is your most recently used tab right now  → coolest color
   //   t = 1  → this is your least recently used tab right now  → warmest color
   //
-  // Example: suppose right now you have tabs with these lastOpenedTs values:
-  //   Tab A (most recent): 1000
-  //   Tab B:                850
-  //   Tab C (oldest):       600
-  //
-  // Then minTs=600, maxTs=1000
-  //
-  // For Tab B: t = (1000 - 850) / (1000 - 600) = 150 / 400 = 0.375
-  //
   // The formula (maxTs - timestamp) / (maxTs - minTs) makes larger timestamps (more recent)
   // produce smaller t values.
   const t = (maxTs - timestamp) / (maxTs - minTs);
 
   // 2. Apply non-linear curve so the visual change is more sensitive for recently-used tabs
-  //    (small age differences early on matter more than huge differences on very old tabs)
   const u = Math.pow(t, 0.6);
 
   // 3. Map u into HSL color space (smooth interpolation, no discrete buckets)
   const hue   = 210 - (u * 175);   // blueish cool → orange warm
   const sat   = 12  + (u * 58);    // low saturation → richer warm color
   const light = 96  - (u * 10);    // very pale → a bit less pale
-
-  // === DEBUG: uncomment the two lines below to see the actual numbers in the console
-  //            every time you open the popup or change filters.
-  // console.log('Age scale this render → minTs:', minTs, 'maxTs:', maxTs);
-  // console.log('  tab ts:', timestamp, '→ t=', t.toFixed(3), 'u=', u.toFixed(3), '→ color=', `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%)`);
 
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
@@ -52,12 +37,57 @@ function formatShortDate(timestamp, fallbackText = "") {
   return `${year}.${month}.${day} ${hour}:${minute}`;
 }
 
+/** Normalize background responses (new structured + legacy plain object). */
+function normalizeTabInfoResponse(response) {
+  if (!response || typeof response !== "object") {
+    return {
+      ok: false,
+      tabInfoList: {},
+      error: "Empty response from background",
+      meta: {},
+    };
+  }
+
+  // New format
+  if (Object.prototype.hasOwnProperty.call(response, "tabInfoList")) {
+    return {
+      ok: response.ok !== false,
+      tabInfoList: response.tabInfoList || {},
+      error: response.error || null,
+      meta: response.meta || {},
+    };
+  }
+
+  // Legacy: background returned the map directly
+  if (response.error && Object.keys(response).length <= 2) {
+    return {
+      ok: false,
+      tabInfoList: {},
+      error: String(response.error),
+      meta: {},
+    };
+  }
+
+  return {
+    ok: true,
+    tabInfoList: response,
+    error: null,
+    meta: {},
+  };
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   const tableBody = document.getElementById("table-body");
   const searchInput = document.getElementById("search-input");
   const tableHeaders = document.querySelectorAll("th[data-sort]");
   const audioFilterCheckbox = document.getElementById("audio-filter-checkbox");
   const kofiLink = document.getElementById("kofi-link");
+  const emptyState = document.getElementById("empty-state");
+  const debugPanel = document.getElementById("debug-panel");
+  const debugModeCheckbox = document.getElementById("debug-mode-checkbox");
+  const debugCopyBtn = document.getElementById("debug-copy-btn");
+  const debugStatus = document.getElementById("debug-status");
+  const brandEl = document.querySelector(".brand");
 
   if (kofiLink) {
     kofiLink.addEventListener("click", () => {
@@ -71,6 +101,75 @@ document.addEventListener("DOMContentLoaded", function () {
   let sortOrder = 1;
   let showOnlyAudible = false;
   let personalBest = 0;
+  let loadError = null;
+  let lastMeta = {};
+  let debugMode = false;
+  let debugPanelVisible = false;
+
+  // Double-click brand to show/hide the debug panel (keeps UI clean by default)
+  if (brandEl) {
+    brandEl.style.cursor = "default";
+    brandEl.title = "Double-click for debug tools";
+    brandEl.addEventListener("dblclick", () => {
+      debugPanelVisible = !debugPanelVisible;
+      updateDebugPanelVisibility();
+    });
+  }
+
+  if (debugModeCheckbox) {
+    debugModeCheckbox.addEventListener("change", async () => {
+      debugMode = debugModeCheckbox.checked;
+      try {
+        await browser.runtime.sendMessage({
+          type: "setDebugMode",
+          enabled: debugMode,
+        });
+        await browser.storage.local.set({ debugMode });
+        setDebugStatus(debugMode ? "Debug on — open popup again after issues" : "Debug off");
+      } catch (err) {
+        setDebugStatus("Failed to set debug: " + err);
+      }
+    });
+  }
+
+  if (debugCopyBtn) {
+    debugCopyBtn.addEventListener("click", async () => {
+      try {
+        const report = await browser.runtime.sendMessage({ type: "getDebugReport" });
+        const payload = {
+          ...(report && report.report ? report.report : report),
+          popup: {
+            visibleCount: filteredTabEntries.length,
+            trackedCount: Object.keys(tabInfoList).length,
+            search: searchInput.value,
+            showOnlyAudible,
+            sortField,
+            sortOrder,
+            loadError,
+            lastMeta,
+          },
+        };
+        const text = JSON.stringify(payload, null, 2);
+        await navigator.clipboard.writeText(text);
+        setDebugStatus("Logs copied to clipboard");
+      } catch (err) {
+        setDebugStatus("Copy failed: " + err);
+      }
+    });
+  }
+
+  function updateDebugPanelVisibility() {
+    if (!debugPanel) return;
+    if (debugPanelVisible || debugMode) {
+      debugPanel.hidden = false;
+    } else {
+      debugPanel.hidden = true;
+    }
+  }
+
+  function setDebugStatus(text) {
+    if (debugStatus) debugStatus.textContent = text || "";
+  }
 
   // Restore previous search + audio filter + sort state
   (async () => {
@@ -80,6 +179,7 @@ document.addEventListener("DOMContentLoaded", function () {
         "popupShowOnlyAudible",
         "popupSortField",
         "popupSortOrder",
+        "debugMode",
       ]);
 
       if (result.popupSearch) {
@@ -94,26 +194,50 @@ document.addEventListener("DOMContentLoaded", function () {
         sortOrder = result.popupSortOrder || 1;
       }
 
+      debugMode = !!result.debugMode;
+      if (debugModeCheckbox) debugModeCheckbox.checked = debugMode;
+      if (debugMode) debugPanelVisible = true;
+      updateDebugPanelVisibility();
+
       // Load personal best
       const bestResult = await browser.storage.local.get("personalBest");
       personalBest = bestResult.personalBest || 0;
       updatePersonalBestDisplay();
 
-      const responseTabInfoList = await browser.runtime.sendMessage("getTabInfo");
-      tabInfoList = responseTabInfoList || {};
+      const rawResponse = await browser.runtime.sendMessage({ type: "getTabInfo" });
+      const normalized = normalizeTabInfoResponse(rawResponse);
+      tabInfoList = normalized.tabInfoList || {};
+      loadError = normalized.ok ? null : (normalized.error || "Unknown load error");
+      lastMeta = normalized.meta || {};
+
+      if (debugMode) {
+        setDebugStatus(
+          (normalized.ok ? "ok" : "ERR") +
+            " tracked=" +
+            Object.keys(tabInfoList).length +
+            (lastMeta.openTabs != null ? " open=" + lastMeta.openTabs : "") +
+            (lastMeta.ms != null ? " " + lastMeta.ms + "ms" : "") +
+            (lastMeta.fallback ? " fallback" : "")
+        );
+      }
 
       applyFilters();
       renderTable();
       updateSortIndicators();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
-      searchInput.focus();
-      searchInput.select();
+      // Defer focus slightly so stylesheets can settle (reduces FOUC/layout warnings).
+      requestAnimationFrame(() => {
+        searchInput.focus();
+        searchInput.select();
+      });
     } catch (err) {
       console.error("Popup init failed:", err);
-      // Fallback so UI still appears (empty table is better than blank)
+      loadError = String(err && err.message ? err.message : err);
+      tabInfoList = {};
       applyFilters();
       renderTable();
+      if (debugMode) setDebugStatus("Popup init failed: " + loadError);
     }
   })();
 
@@ -248,24 +372,61 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  function updateEmptyState() {
+    if (!emptyState) return;
+
+    const total = Object.keys(tabInfoList).length;
+    const visible = filteredTabEntries.length;
+
+    if (visible > 0) {
+      emptyState.hidden = true;
+      emptyState.textContent = "";
+      emptyState.removeAttribute("data-kind");
+      return;
+    }
+
+    emptyState.hidden = false;
+
+    if (loadError) {
+      emptyState.dataset.kind = "error";
+      emptyState.textContent =
+        "Could not load tabs (" + loadError + "). Try closing and reopening the popup.";
+      return;
+    }
+
+    if (total > 0 && (searchInput.value || showOnlyAudible)) {
+      emptyState.dataset.kind = "filter";
+      emptyState.textContent =
+        "No tabs match your filters (" +
+        total +
+        " open). Clear search" +
+        (showOnlyAudible ? " or turn off “Playing audio”" : "") +
+        ".";
+      return;
+    }
+
+    emptyState.dataset.kind = "empty";
+    emptyState.textContent = "No tabs found. If you have tabs open, try reopening the popup.";
+  }
+
   function renderTable() {
-    const countEl = document.getElementById('visible-tab-count');
+    const countEl = document.getElementById("visible-tab-count");
     if (countEl) {
       const newCount = filteredTabEntries.length;
-      if (countEl.textContent != newCount) {
-        // Fun pop animation - make the number "jump" bigger then settle.
-        // We disable transition, force it big (scale 1.3), force browser to notice
-        // the change (offsetWidth), swap the text, then re-enable the transition
-        // and go back to normal. The bouncy cubic-bezier gives it a little spring.
-        countEl.style.transition = 'none';
-        countEl.style.transform = 'scale(1.3)';
-        
-        // Force reflow so the scale(1.3) is committed before we start the transition
-        void countEl.offsetWidth;
-        
+      const prev = countEl.textContent;
+      if (prev != newCount) {
         countEl.textContent = newCount;
-        countEl.style.transition = 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        countEl.style.transform = 'scale(1)';
+        // Defer animation so we don't force layout before stylesheets settle
+        // (avoids "Layout was forced before the page was fully loaded" warnings).
+        requestAnimationFrame(() => {
+          countEl.style.transition = "none";
+          countEl.style.transform = "scale(1.15)";
+          requestAnimationFrame(() => {
+            countEl.style.transition =
+              "transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)";
+            countEl.style.transform = "scale(1)";
+          });
+        });
       }
     }
 
@@ -273,9 +434,6 @@ document.addEventListener("DOMContentLoaded", function () {
     checkForNewPersonalBest();
 
     // === DATA-DRIVEN SCALE ===
-    // We scan ALL currently open tabs (tabInfoList) to find the real min and max
-    // lastOpenedTs that exist right now. These two numbers define the entire color scale
-    // for this render. No hard-coded "7 days" or similar.
     let minTs = Infinity;
     let maxTs = 0;
     for (const key in tabInfoList) {
@@ -285,9 +443,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (ts > maxTs) maxTs = ts;
       }
     }
-
-    // === DEBUG (uncomment to see the actual numbers while the popup is open) ===
-    // console.log('Age scale this render - minTs:', minTs, 'maxTs:', maxTs, 'rangeHours:', (maxTs-minTs)/3600000);
 
     // Safe clear (avoids any innerHTML usage/warnings)
     while (tableBody.firstChild) {
@@ -305,6 +460,8 @@ document.addEventListener("DOMContentLoaded", function () {
       fragment.appendChild(row);
     });
     tableBody.appendChild(fragment);
+
+    updateEmptyState();
   }
 
   function applyFilters() {
