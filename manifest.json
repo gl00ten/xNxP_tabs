@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "xNxP Tabs",
-  "version": "1.1.27",
-  "description": "ADHD friendly tab manager with search, sorting and tab age. Ctrl+Shift+U. Pin it. I use Firefox mostly, please report Chrome bugs.",
+  "version": "1.1.28",
+  "description": "ADHD friendly tabs: search, unload for RAM, close dupes, age by last open. Ctrl+Shift+U. Pin it. Report Chrome bugs.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
