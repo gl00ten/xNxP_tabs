@@ -1,36 +1,49 @@
 # xNxP Tabs
 
-ADHD friendly tab manager showing first opened + last active time. Default shortcut: **Ctrl+Shift+U** (Windows/Linux) or **Cmd+Shift+U** (Mac). **Pin the extension** so the toolbar icon stays visible.
+ADHD friendly tab manager for when you have *way* too many tabs open.
+
+Shows first opened and last active time, search, unload (free memory without closing), close duplicates, and more. Default shortcut: **Ctrl+Shift+U** (Windows/Linux) or **Cmd+Shift+U** (Mac). **Pin the extension** so the toolbar icon stays visible.
 
 ## Usage
 
-1. **Pin the extension**: open the extensions menu and pin xNxP Tabs so it is always shown in the toolbar.
-2. Open the popup by clicking the pinned icon or with the keyboard shortcut (**Ctrl+Shift+U** / **Cmd+Shift+U**).
-3. Search is automatically focused and selected when the popup opens.
+1. **Pin the extension** so it stays on the toolbar.
+2. Open with the icon or **Ctrl+Shift+U** / **Cmd+Shift+U**.
+3. Search is focused when the popup opens — type and press Enter to jump to the first match.
+4. Use the **☰** menu for:
+   - **Unload listed tabs** (uses current search/filters; empty search = all)
+   - **Unload tabs in one window…**
+   - **Close duplicate tabs** (keeps the copy you used most recently)
+   - **Support on Ko-fi**
 
-Customize the shortcut in your browser:
+Customize the shortcut:
 
+- **Firefox**: `about:addons` → extension → Manage Extension Shortcuts  
 - **Chrome/Edge**: `chrome://extensions/shortcuts`
-- **Firefox**: `about:addons` → click the extension → Manage Extension Shortcuts
 
-## Loading the Extension
+## Loading (development)
 
-### Firefox
+### Firefox (`firefox_extension` branch)
 
-1. Go to `about:debugging#/runtime/this-firefox`
-2. Click **"Load Temporary Add-on..."**
+1. `about:debugging#/runtime/this-firefox`
+2. **Load Temporary Add-on…**
 3. Select `manifest.json`
-4. Click Open.
 
-### Chrome / Edge / Brave
+### Chrome / Edge / Brave (`main` branch)
 
-1. Go to `chrome://extensions`
-2. Turn on "Developer mode"
-3. Click "Load unpacked"
-4. Select this folder.
+1. `chrome://extensions`
+2. Developer mode → **Load unpacked**
+3. Select this folder
 
 ## Notes
 
-- The extension uses the `webextension-polyfill` so we can use the modern `browser.*` APIs in both Firefox and Chrome.
-- Manifest V2 is used for maximum compatibility right now. (You may see deprecation warnings in recent Firefox when loading as a temporary add-on because Firefox prefers Manifest V3; the extension still works fine on V2.)
-- Large design source files (`ori_icon*.png`) are intentionally ignored via `.gitignore`.
+- **`firefox_extension`**: Firefox Manifest V2 (AMO).
+- **`main`**: Chrome Manifest V3.
+- Uses `webextension-polyfill` for `browser.*` APIs.
+- Large design sources (`ori_icon*.png`) are gitignored.
+
+## Development
+
+```bash
+npm test
+# or: node --test test/core.test.js
+```
