@@ -120,44 +120,6 @@ body {
   text-align: center;
 }
 
-.kofi-link {
-  position: fixed;
-  right: 10px;
-  bottom: 6px;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  border: 1px solid rgba(208, 218, 228, 0.45);
-  background: rgba(255, 255, 255, 0.45);
-  padding: 0 4px;
-  margin: 0;
-  border-radius: 9999px;
-  font-family: inherit;
-  font-size: 7px;
-  font-weight: 500;
-  line-height: 1;
-  color: rgba(143, 163, 184, 0.75);
-  cursor: pointer;
-  box-shadow: none;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.kofi-icon {
-  font-size: 7px;
-  line-height: 1;
-}
-
-.kofi-label {
-  letter-spacing: 0.01em;
-}
-
-.kofi-link:hover {
-  color: var(--muted);
-  border-color: rgba(184, 200, 216, 0.7);
-  background: rgba(255, 255, 255, 0.72);
-}
-
 .empty-state {
   margin: 0 var(--space-m) var(--space-m);
   padding: 10px 12px;
@@ -360,53 +322,11 @@ body {
   font-weight: 700;
 }
 
-/* ---------- Age legend (last opened) ---------- */
-
-.age-legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px var(--space-m) 0;
-  padding: 0 2px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.age-legend-label {
-  flex-shrink: 0;
-}
-
-.age-legend-bar {
-  flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  /* none → blue → orange (matches row age coloring) */
-  background: linear-gradient(
-    90deg,
-    #f8fbff 0%,
-    hsl(210, 55%, 72%) 45%,
-    hsl(28, 80%, 58%) 100%
-  );
-  box-shadow: inset 0 0 0 1px rgba(16, 32, 51, 0.08);
-}
-
-.age-legend-end {
-  flex-shrink: 0;
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #1768ad;
-}
-
-.age-legend-end-old {
-  color: #c45c00;
-}
-
 /* ---------- Table ---------- */
 
 table {
   width: 100%;
-  margin: var(--space-m) var(--space-m) var(--space-l);
+  margin: var(--space-l) var(--space-m);
   table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid var(--border-warm);

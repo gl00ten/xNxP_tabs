@@ -96,7 +96,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const searchInput = document.getElementById("search-input");
   const tableHeaders = document.querySelectorAll("th[data-sort]");
   const audioFilterCheckbox = document.getElementById("audio-filter-checkbox");
-  const kofiLink = document.getElementById("kofi-link");
   const emptyState = document.getElementById("empty-state");
   const debugPanel = document.getElementById("debug-panel");
   const debugModeCheckbox = document.getElementById("debug-mode-checkbox");
@@ -116,11 +115,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let memBarPinned = false;
   let lastDupesAnalysis = { toCloseIds: [], count: 0, groups: 0 };
 
-  if (kofiLink) {
-    kofiLink.addEventListener("click", () => {
-      browser.tabs.create({ url: "https://ko-fi.com/gl00ten" });
-    });
-  }
+  const KOFI_URL = "https://ko-fi.com/gl00ten";
 
   // --- Unload / duplicate helpers (tabs.discard / remove) ---
 
@@ -495,6 +490,12 @@ document.addEventListener("DOMContentLoaded", function () {
         } finally {
           item.disabled = false;
         }
+        return;
+      }
+
+      if (action === "donate") {
+        setMenuOpen(false);
+        browser.tabs.create({ url: KOFI_URL });
       }
     });
 

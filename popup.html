@@ -73,6 +73,19 @@
               <span class="actions-menu-hint">keep newest last-opened · close older same-URL copies</span>
             </span>
           </button>
+          <div class="actions-menu-divider" role="separator"></div>
+          <button
+            type="button"
+            class="actions-menu-item"
+            data-action="donate"
+            role="menuitem"
+          >
+            <span class="actions-menu-icon" aria-hidden="true">☕</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Support on Ko-fi</span>
+              <span class="actions-menu-hint">buy me a coffee if this helps</span>
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -100,13 +113,6 @@
       <span id="debug-status" class="debug-status"></span>
     </div>
 
-    <div class="age-legend" title="Color by last opened among open tabs">
-      <span class="age-legend-label">Last opened</span>
-      <span class="age-legend-bar" aria-hidden="true"></span>
-      <span class="age-legend-end">newest</span>
-      <span class="age-legend-end age-legend-end-old">oldest</span>
-    </div>
-
     <table>
       <thead>
         <tr>
@@ -120,14 +126,6 @@
     </table>
 
     <div id="empty-state" class="empty-state" hidden></div>
-
-    <button
-      type="button"
-      id="kofi-link"
-      class="kofi-link"
-      title="Support on Ko-fi"
-      aria-label="Support on Ko-fi"
-    ><span class="kofi-icon" aria-hidden="true">☕</span><span class="kofi-label">ko-fi</span></button>
 
     <script src="browser-polyfill.js"></script>
     <script src="lib/core.js"></script>
