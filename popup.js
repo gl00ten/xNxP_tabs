@@ -102,6 +102,12 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugCopyBtn = document.getElementById("debug-copy-btn");
   const debugHideBtn = document.getElementById("debug-hide-btn");
   const debugStatus = document.getElementById("debug-status");
+  const debugOpenCountEl = document.getElementById("debug-open-count");
+  const debugOpenCountInput = document.getElementById("debug-open-count-input");
+  const debugOpenCountSet = document.getElementById("debug-open-count-set");
+  const debugTip2 = document.getElementById("debug-tip-2");
+  const debugTip6 = document.getElementById("debug-tip-6");
+  const debugTip14 = document.getElementById("debug-tip-14");
   const menuBtn = document.getElementById("menu-btn");
   const actionsMenu = document.getElementById("actions-menu");
   const memBar = document.getElementById("mem-bar");
@@ -637,10 +643,42 @@ document.addEventListener("DOMContentLoaded", function () {
   let debugMode = false;
   let debugPanelVisible = false;
 
+  async function refreshDebugOpenCount() {
+    try {
+      const stored = await browser.storage.local.get("popupOpenCount");
+      const n = stored.popupOpenCount || 0;
+      if (debugOpenCountEl) debugOpenCountEl.textContent = String(n);
+      if (debugOpenCountInput && document.activeElement !== debugOpenCountInput) {
+        debugOpenCountInput.value = String(n);
+      }
+      return n;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  async function setPopupOpenCount(value) {
+    const n = Math.max(0, Math.floor(Number(value)) || 0);
+    await browser.storage.local.set({ popupOpenCount: n });
+    await refreshDebugOpenCount();
+    setDebugStatus("popupOpenCount = " + n + " (tips at 2, 6, 14)");
+    return n;
+  }
+
+  async function forceSpeechTip(openNumber) {
+    await setPopupOpenCount(openNumber);
+    const msg =
+      SPEECH_MESSAGES[openNumber] ||
+      "Psst — try the ☰ menu on the right. This extension does more stuff!";
+    showSpeechBubble(msg);
+    setDebugStatus("Forced tip for open #" + openNumber);
+  }
+
   function showDebugPanel(show) {
     debugPanelVisible = !!show;
     updateDebugPanelVisibility();
     if (show) {
+      refreshDebugOpenCount();
       setDebugStatus(
         "tracked=" +
           Object.keys(tabInfoList).length +
@@ -648,6 +686,32 @@ document.addEventListener("DOMContentLoaded", function () {
           (lastMeta.source ? " " + lastMeta.source : "")
       );
     }
+  }
+
+  if (debugOpenCountSet) {
+    debugOpenCountSet.addEventListener("click", async () => {
+      const raw = debugOpenCountInput ? debugOpenCountInput.value : "0";
+      await setPopupOpenCount(raw);
+    });
+  }
+
+  if (debugOpenCountInput) {
+    debugOpenCountInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        await setPopupOpenCount(debugOpenCountInput.value);
+      }
+    });
+  }
+
+  if (debugTip2) {
+    debugTip2.addEventListener("click", () => forceSpeechTip(2));
+  }
+  if (debugTip6) {
+    debugTip6.addEventListener("click", () => forceSpeechTip(6));
+  }
+  if (debugTip14) {
+    debugTip14.addEventListener("click", () => forceSpeechTip(14));
   }
 
   // Hidden entry: four rapid clicks on the logo (left icon + title) toggles debug.
@@ -713,6 +777,9 @@ document.addEventListener("DOMContentLoaded", function () {
             sortOrder,
             loadError,
             lastMeta,
+            popupOpenCount: debugOpenCountEl
+              ? debugOpenCountEl.textContent
+              : undefined,
           },
         };
         const text = JSON.stringify(payload, null, 2);

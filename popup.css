@@ -281,8 +281,9 @@ body {
 
 .debug-panel {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   margin: 0;
   padding: 5px 10px;
   border-bottom: 1px solid var(--border);
@@ -322,8 +323,31 @@ body {
   color: var(--text);
 }
 
+.debug-open-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.debug-open-count strong {
+  color: var(--blue-2);
+  min-width: 1.5em;
+}
+
+.debug-open-count input[type="number"] {
+  width: 52px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--text);
+}
+
 .debug-status {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
