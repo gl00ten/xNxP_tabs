@@ -151,12 +151,12 @@ describe("getAgeColors (linear newest → blue → orange)", () => {
     assert.equal(core.getAgeT(maxTs, minTs, maxTs), 0);
   });
 
-  it("returns colors for mid and oldest", () => {
+  it("returns a soft wash for mid and oldest", () => {
     const mid = core.getAgeColors(1500, minTs, maxTs);
     assert.ok(mid);
     assert.ok(Math.abs(mid.t - 0.5) < 0.001);
     assert.match(mid.wash, /^hsl\(/);
-    assert.match(mid.stripe, /^hsl\(/);
+    assert.equal(mid.stripe, undefined);
 
     const old = core.getAgeColors(minTs, minTs, maxTs);
     assert.ok(old);

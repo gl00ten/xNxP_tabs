@@ -947,7 +947,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
       if (age) {
-        row.style.boxShadow = "inset 4px 0 0 " + age.stripe;
         row.style.backgroundColor = age.wash;
       }
 

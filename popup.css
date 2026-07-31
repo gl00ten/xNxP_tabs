@@ -369,8 +369,9 @@ tbody tr {
   cursor: pointer;
 }
 
+/* Hover uses a soft orange veil so age wash still reads underneath */
 tbody tr:hover td {
-  background: var(--row-hover);
+  background-color: rgba(255, 243, 224, 0.72) !important;
 }
 
 /* Age backgrounds are fully data-driven:
