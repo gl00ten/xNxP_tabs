@@ -32,6 +32,40 @@
         <input type="checkbox" id="audio-filter-checkbox">
         <span>Playing audio</span>
       </label>
+      <div class="header-menu-wrap">
+        <button
+          type="button"
+          id="menu-btn"
+          class="menu-btn"
+          title="Actions"
+          aria-label="Actions menu"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >☰</button>
+        <div id="actions-menu" class="actions-menu" hidden role="menu">
+          <button type="button" class="actions-menu-item" data-action="unload-all-others" role="menuitem">
+            Unload all others
+            <span class="actions-menu-hint">all windows · keep this tab</span>
+          </button>
+          <button type="button" class="actions-menu-item" data-action="unload-window" role="menuitem">
+            Unload in a window…
+            <span class="actions-menu-hint">pick a window · keep its active tab</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mem-bar" class="mem-bar" aria-live="polite">
+      <span id="mem-stats">Loading memory stats…</span>
+    </div>
+
+    <div id="window-picker" class="window-picker" hidden>
+      <div class="window-picker-header">
+        <span class="window-picker-title">Unload tabs in window</span>
+        <button type="button" id="window-picker-cancel" class="window-picker-cancel">Cancel</button>
+      </div>
+      <p class="window-picker-help">Keeps that window’s active tab loaded. Unloads the rest (skips pinned &amp; already unloaded).</p>
+      <div id="window-picker-list" class="window-picker-list"></div>
     </div>
 
     <div id="debug-panel" class="debug-panel" hidden>

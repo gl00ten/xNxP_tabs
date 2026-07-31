@@ -63,7 +63,9 @@ body {
   background: linear-gradient(90deg, #0a6fe8 0%, #148dff 58%, #35c7ff 100%);
   border-bottom: 3px solid var(--orange);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 .brand {
@@ -502,6 +504,215 @@ th.col-date {
   font-size: 13px;
   font-weight: 900;
   line-height: 1;
+}
+
+.discarded-indicator {
+  color: #7f96b0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+/* ---------- Header actions menu ---------- */
+
+.header-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.menu-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.menu-btn:hover,
+.menu-btn[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  padding: 6px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 22px rgba(16, 32, 51, 0.18);
+  z-index: 40;
+}
+
+.actions-menu[hidden] {
+  display: none !important;
+}
+
+.actions-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.actions-menu-item:hover {
+  background: var(--blue-soft);
+}
+
+.actions-menu-item:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.actions-menu-hint {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ---------- Memory / unload stats bar ---------- */
+
+.mem-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #eef4fb;
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.mem-bar strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.mem-bar .mem-delta {
+  color: #0a7a3e;
+  font-weight: 700;
+}
+
+.mem-bar .mem-note {
+  opacity: 0.8;
+}
+
+/* ---------- Window picker ---------- */
+
+.window-picker {
+  margin: var(--space-m);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.window-picker[hidden] {
+  display: none !important;
+}
+
+.window-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.window-picker-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.window-picker-cancel {
+  border: 1px solid var(--border);
+  background: #f7fafc;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.window-picker-help {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.window-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.window-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--row);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.window-picker-item:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.window-picker-item-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-picker-item-meta {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.window-picker-item.is-current .window-picker-item-title::after {
+  content: " · this window";
+  color: var(--orange-2);
+  font-weight: 700;
 }
 
 /* ---------- New-record fireworks (only for records > 100) ---------- */

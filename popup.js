@@ -102,6 +102,7 @@ async function loadTabsDirectly() {
       url: tab.url || "",
       favIconUrl: tab.favIconUrl || prev?.favIconUrl || "",
       audible: !!tab.audible,
+      discarded: !!tab.discarded,
       firstOpened,
       firstOpenedTs,
       lastOpened,
@@ -138,10 +139,297 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugCopyBtn = document.getElementById("debug-copy-btn");
   const debugHideBtn = document.getElementById("debug-hide-btn");
   const debugStatus = document.getElementById("debug-status");
+  const menuBtn = document.getElementById("menu-btn");
+  const actionsMenu = document.getElementById("actions-menu");
+  const memStatsEl = document.getElementById("mem-stats");
+  const windowPicker = document.getElementById("window-picker");
+  const windowPickerList = document.getElementById("window-picker-list");
+  const windowPickerCancel = document.getElementById("window-picker-cancel");
 
   if (kofiLink) {
     kofiLink.addEventListener("click", () => {
       browser.tabs.create({ url: "https://ko-fi.com/gl00ten" });
+    });
+  }
+
+  // --- Unload helpers (tabs.discard) ---
+
+  function isDiscardableUrl(url) {
+    if (!url) return false;
+    if (url.startsWith("about:")) return false;
+    if (url.startsWith("moz-extension:")) return false;
+    if (url.startsWith("chrome:")) return false;
+    if (url.startsWith("chrome-extension:")) return false;
+    if (url.startsWith("edge:")) return false;
+    return true;
+  }
+
+  async function getTabLoadStats() {
+    const tabs = await browser.tabs.query({});
+    let loaded = 0;
+    let discarded = 0;
+    for (const tab of tabs) {
+      if (tab.discarded) discarded += 1;
+      else loaded += 1;
+    }
+    return { total: tabs.length, loaded, discarded };
+  }
+
+  /** Firefox does not expose process RAM to extensions; we show load counts. */
+  async function refreshMemBar(extra = null) {
+    if (!memStatsEl) return;
+    try {
+      const stats = await getTabLoadStats();
+      while (memStatsEl.firstChild) {
+        memStatsEl.removeChild(memStatsEl.firstChild);
+      }
+
+      const appendStrongPair = (label, value) => {
+        memStatsEl.appendChild(document.createTextNode(label));
+        const strong = document.createElement("strong");
+        strong.textContent = String(value);
+        memStatsEl.appendChild(strong);
+      };
+
+      appendStrongPair("In memory: ", stats.loaded);
+      memStatsEl.appendChild(document.createTextNode(" · "));
+      appendStrongPair("Sleeping: ", stats.discarded);
+      memStatsEl.appendChild(document.createTextNode(" · "));
+      appendStrongPair("Total: ", stats.total);
+
+      if (extra && typeof extra.unloaded === "number") {
+        memStatsEl.appendChild(document.createTextNode(" · "));
+        const delta = document.createElement("span");
+        delta.className = "mem-delta";
+        delta.textContent = "just unloaded " + extra.unloaded;
+        memStatsEl.appendChild(delta);
+      }
+
+      memStatsEl.appendChild(document.createTextNode(" "));
+      const note = document.createElement("span");
+      note.className = "mem-note";
+      note.textContent =
+        "(tab load counts · browser RAM not exposed to add-ons)";
+      memStatsEl.appendChild(note);
+    } catch (err) {
+      memStatsEl.textContent = "Could not read tab stats";
+    }
+  }
+
+  async function discardInChunks(tabIds, chunkSize = 80) {
+    let discarded = 0;
+    for (let i = 0; i < tabIds.length; i += chunkSize) {
+      const chunk = tabIds.slice(i, i + chunkSize);
+      try {
+        await browser.tabs.discard(chunk);
+        discarded += chunk.length;
+      } catch (err) {
+        // Some tabs cannot be discarded; try one-by-one for the chunk
+        for (const id of chunk) {
+          try {
+            await browser.tabs.discard(id);
+            discarded += 1;
+          } catch (_) {
+            // skip
+          }
+        }
+      }
+    }
+    return discarded;
+  }
+
+  async function unloadAllOthers() {
+    const [current] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (!current) throw new Error("No active tab");
+
+    const tabs = await browser.tabs.query({});
+    const ids = tabs
+      .filter(
+        (t) =>
+          t.id !== current.id &&
+          !t.pinned &&
+          !t.discarded &&
+          isDiscardableUrl(t.url)
+      )
+      .map((t) => t.id);
+
+    const unloaded = await discardInChunks(ids);
+    return { unloaded, keptId: current.id };
+  }
+
+  async function unloadInWindow(windowId) {
+    const tabs = await browser.tabs.query({ windowId });
+    const active = tabs.find((t) => t.active);
+    const ids = tabs
+      .filter(
+        (t) =>
+          (!active || t.id !== active.id) &&
+          !t.pinned &&
+          !t.discarded &&
+          isDiscardableUrl(t.url)
+      )
+      .map((t) => t.id);
+
+    const unloaded = await discardInChunks(ids);
+    return { unloaded, windowId };
+  }
+
+  async function reloadTabListFromBrowser() {
+    const direct = await loadTabsDirectly();
+    tabInfoList = direct.tabInfoList || {};
+    lastMeta = direct.meta || {};
+    loadError = null;
+    applyFilters();
+    renderTable();
+  }
+
+  function setMenuOpen(open) {
+    if (!actionsMenu || !menuBtn) return;
+    actionsMenu.hidden = !open;
+    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function setWindowPickerOpen(open) {
+    if (!windowPicker) return;
+    windowPicker.hidden = !open;
+  }
+
+  async function showWindowPicker() {
+    if (!windowPickerList) return;
+    setMenuOpen(false);
+
+    while (windowPickerList.firstChild) {
+      windowPickerList.removeChild(windowPickerList.firstChild);
+    }
+
+    const [currentWin, windows, allTabs] = await Promise.all([
+      browser.windows.getCurrent(),
+      browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
+      browser.tabs.query({}),
+    ]);
+
+    const tabsByWindow = {};
+    for (const tab of allTabs) {
+      if (!tabsByWindow[tab.windowId]) tabsByWindow[tab.windowId] = [];
+      tabsByWindow[tab.windowId].push(tab);
+    }
+
+    windows
+      .slice()
+      .sort((a, b) => (a.id || 0) - (b.id || 0))
+      .forEach((win) => {
+        const tabs = tabsByWindow[win.id] || win.tabs || [];
+        const active = tabs.find((t) => t.active);
+        const loaded = tabs.filter((t) => !t.discarded).length;
+        const unloadable = tabs.filter(
+          (t) =>
+            (!active || t.id !== active.id) &&
+            !t.pinned &&
+            !t.discarded &&
+            isDiscardableUrl(t.url)
+        ).length;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "window-picker-item";
+        if (currentWin && win.id === currentWin.id) {
+          btn.classList.add("is-current");
+        }
+
+        const title = document.createElement("span");
+        title.className = "window-picker-item-title";
+        title.textContent =
+          (active && active.title) ||
+          (active && active.url) ||
+          "Window " + win.id;
+
+        const meta = document.createElement("span");
+        meta.className = "window-picker-item-meta";
+        meta.textContent =
+          tabs.length +
+          " tabs · " +
+          loaded +
+          " loaded · can unload " +
+          unloadable;
+
+        btn.appendChild(title);
+        btn.appendChild(meta);
+
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          try {
+            const result = await unloadInWindow(win.id);
+            setWindowPickerOpen(false);
+            await reloadTabListFromBrowser();
+            await refreshMemBar({ unloaded: result.unloaded });
+          } catch (err) {
+            console.error("Unload window failed:", err);
+            btn.disabled = false;
+            if (memStatsEl) {
+              memStatsEl.textContent = "Unload failed: " + err;
+            }
+          }
+        });
+
+        windowPickerList.appendChild(btn);
+      });
+
+    setWindowPickerOpen(true);
+  }
+
+  if (menuBtn && actionsMenu) {
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setMenuOpen(actionsMenu.hidden);
+    });
+
+    actionsMenu.addEventListener("click", async (e) => {
+      const item = e.target.closest("[data-action]");
+      if (!item) return;
+      const action = item.getAttribute("data-action");
+
+      if (action === "unload-window") {
+        try {
+          await showWindowPicker();
+        } catch (err) {
+          console.error(err);
+          if (memStatsEl) memStatsEl.textContent = "Could not list windows";
+        }
+        return;
+      }
+
+      if (action === "unload-all-others") {
+        item.disabled = true;
+        setMenuOpen(false);
+        try {
+          const result = await unloadAllOthers();
+          await reloadTabListFromBrowser();
+          await refreshMemBar({ unloaded: result.unloaded });
+        } catch (err) {
+          console.error("Unload all others failed:", err);
+          if (memStatsEl) {
+            memStatsEl.textContent = "Unload failed: " + err;
+          }
+        } finally {
+          item.disabled = false;
+        }
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!actionsMenu.hidden) {
+        const wrap = e.target.closest(".header-menu-wrap");
+        if (!wrap) setMenuOpen(false);
+      }
+    });
+  }
+
+  if (windowPickerCancel) {
+    windowPickerCancel.addEventListener("click", () => {
+      setWindowPickerOpen(false);
     });
   }
 
@@ -313,6 +601,7 @@ document.addEventListener("DOMContentLoaded", function () {
       applyFilters();
       renderTable();
       updateSortIndicators();
+      refreshMemBar();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
       // Defer focus slightly so stylesheets can settle (reduces FOUC/layout warnings).
@@ -326,6 +615,7 @@ document.addEventListener("DOMContentLoaded", function () {
       tabInfoList = {};
       applyFilters();
       renderTable();
+      refreshMemBar();
       if (debugMode) setDebugStatus("Popup init failed: " + loadError);
     }
   })();
@@ -433,6 +723,14 @@ document.addEventListener("DOMContentLoaded", function () {
       audioIcon.textContent = "♪";
       audioIcon.title = "This tab is playing audio";
       titleDiv.appendChild(audioIcon);
+    }
+
+    if (tabInfo.discarded) {
+      const sleepIcon = document.createElement("span");
+      sleepIcon.classList.add("discarded-indicator");
+      sleepIcon.textContent = "💤";
+      sleepIcon.title = "Unloaded (sleeping — reloads when you open it)";
+      titleDiv.appendChild(sleepIcon);
     }
 
     const titleText = document.createElement("span");
