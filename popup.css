@@ -560,9 +560,9 @@ th.col-date {
 
 .actions-menu-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
-  gap: 2px;
+  gap: 8px;
   width: 100%;
   border: none;
   background: transparent;
@@ -574,6 +574,26 @@ th.col-date {
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
+}
+
+.actions-menu-icon {
+  flex-shrink: 0;
+  width: 1.25em;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.actions-menu-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions-menu-label {
+  line-height: 1.3;
 }
 
 .actions-menu-item:hover {

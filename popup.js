@@ -1,41 +1,5 @@
-function getAgeBackground(timestamp, minTs, maxTs) {
-  if (!timestamp || !isFinite(minTs) || !isFinite(maxTs) || minTs >= maxTs) return null;
-
-  // === THE SCALE (this is the key part) ===
-  // minTs = the OLDEST last-opened timestamp among your CURRENTLY open tabs
-  // maxTs = the MOST RECENT last-opened timestamp among your CURRENTLY open tabs
-  //
-  // For any tab we compute a normalized position t:
-  //   t = 0  → this is your most recently used tab right now  → coolest color
-  //   t = 1  → this is your least recently used tab right now  → warmest color
-  //
-  // The formula (maxTs - timestamp) / (maxTs - minTs) makes larger timestamps (more recent)
-  // produce smaller t values.
-  const t = (maxTs - timestamp) / (maxTs - minTs);
-
-  // 2. Apply non-linear curve so the visual change is more sensitive for recently-used tabs
-  const u = Math.pow(t, 0.6);
-
-  // 3. Map u into HSL color space (smooth interpolation, no discrete buckets)
-  const hue   = 210 - (u * 175);   // blueish cool → orange warm
-  const sat   = 12  + (u * 58);    // low saturation → richer warm color
-  const light = 96  - (u * 10);    // very pale → a bit less pale
-
-  return `hsl(${hue}, ${sat}%, ${light}%)`;
-}
-
-function formatShortDate(timestamp, fallbackText = "") {
-  if (!timestamp) return fallbackText;
-
-  const date = new Date(timestamp);
-  const year = String(date.getFullYear()).slice(-2);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}.${month}.${day} ${hour}:${minute}`;
-}
+// Pure helpers live in lib/core.js (unit-tested). Loaded before this file.
+const Core = globalThis.xNxPCore;
 
 /**
  * Load open tabs from the browser itself (like Tabhunter).
@@ -158,27 +122,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // --- Unload helpers (tabs.discard) ---
-
-  function isDiscardableUrl(url) {
-    if (!url) return false;
-    if (url.startsWith("about:")) return false;
-    if (url.startsWith("moz-extension:")) return false;
-    if (url.startsWith("chrome:")) return false;
-    if (url.startsWith("chrome-extension:")) return false;
-    if (url.startsWith("edge:")) return false;
-    return true;
-  }
+  // --- Unload / duplicate helpers (tabs.discard / remove) ---
 
   async function getTabLoadStats() {
     const tabs = await browser.tabs.query({});
-    let loaded = 0;
-    let discarded = 0;
-    for (const tab of tabs) {
-      if (tab.discarded) discarded += 1;
-      else loaded += 1;
-    }
-    return { total: tabs.length, loaded, discarded };
+    return Core.countTabLoadStats(tabs);
   }
 
   function setMemBarVisible(show) {
@@ -244,104 +192,54 @@ document.addEventListener("DOMContentLoaded", function () {
     return discarded;
   }
 
-  async function unloadAllOthers() {
+  async function countUnloadAllOthers() {
     const [current] = await browser.tabs.query({
       active: true,
       currentWindow: true,
     });
-    if (!current) throw new Error("No active tab");
-
+    if (!current) return { count: 0, ids: [], keptId: null };
     const tabs = await browser.tabs.query({});
-    const ids = tabs
-      .filter(
-        (t) =>
-          t.id !== current.id &&
-          !t.pinned &&
-          !t.discarded &&
-          isDiscardableUrl(t.url)
-      )
-      .map((t) => t.id);
+    const ids = Core.selectUnloadAllOthersIds(tabs, current.id);
+    return { count: ids.length, ids, keptId: current.id };
+  }
 
+  async function unloadAllOthers() {
+    const { ids, keptId } = await countUnloadAllOthers();
+    if (keptId == null) throw new Error("No active tab");
     const unloaded = await discardInChunks(ids);
-    return { unloaded, keptId: current.id };
+    return { unloaded, keptId };
   }
 
   async function unloadInWindow(windowId) {
     const tabs = await browser.tabs.query({ windowId });
-    const active = tabs.find((t) => t.active);
-    const ids = tabs
-      .filter(
-        (t) =>
-          (!active || t.id !== active.id) &&
-          !t.pinned &&
-          !t.discarded &&
-          isDiscardableUrl(t.url)
-      )
-      .map((t) => t.id);
-
+    const ids = Core.selectUnloadInWindowIds(tabs);
     const unloaded = await discardInChunks(ids);
     return { unloaded, windowId };
   }
 
-  /**
-   * Exact URL groups. Keep the most recently last-opened tab (our lastOpenedTs,
-   * else browser lastAccessed). Always keep active tabs. Close older copies.
-   * Skips pinned and internal URLs.
-   */
-  function getLastOpenedTsForTab(tab) {
-    const info = tabInfoList[String(tab.id)];
-    if (info && info.lastOpenedTs) return info.lastOpenedTs;
-    if (tab.lastAccessed) return tab.lastAccessed;
-    return 0;
-  }
-
   async function analyzeDuplicates() {
     const tabs = await browser.tabs.query({});
-    const byUrl = new Map();
+    return Core.analyzeDuplicates(tabs, tabInfoList);
+  }
 
-    for (const tab of tabs) {
-      if (tab.pinned) continue;
-      if (!isDiscardableUrl(tab.url)) continue;
-      const key = tab.url || "";
-      if (!key) continue;
-      if (!byUrl.has(key)) byUrl.set(key, []);
-      byUrl.get(key).push(tab);
+  async function updateUnloadMenuSummaries() {
+    const unloadAllSummary = document.getElementById("unload-all-summary");
+    if (!unloadAllSummary) return;
+    try {
+      unloadAllSummary.textContent = "Counting tabs…";
+      const { count } = await countUnloadAllOthers();
+      if (count === 0) {
+        unloadAllSummary.textContent = "No other tabs to unload from memory";
+      } else {
+        unloadAllSummary.textContent =
+          count +
+          " tab" +
+          (count === 1 ? "" : "s") +
+          " will be unloaded from memory";
+      }
+    } catch (err) {
+      unloadAllSummary.textContent = "Could not count tabs";
     }
-
-    const toCloseIds = [];
-    let groups = 0;
-
-    for (const group of byUrl.values()) {
-      if (group.length < 2) continue;
-      groups += 1;
-
-      const keepIds = new Set();
-      // Never close a currently active tab (any window)
-      for (const tab of group) {
-        if (tab.active) keepIds.add(tab.id);
-      }
-
-      // Keep the most recently last-opened among the group
-      let best = group[0];
-      let bestTs = getLastOpenedTsForTab(best);
-      for (let i = 1; i < group.length; i++) {
-        const tab = group[i];
-        const ts = getLastOpenedTsForTab(tab);
-        if (ts > bestTs) {
-          best = tab;
-          bestTs = ts;
-        }
-      }
-      keepIds.add(best.id);
-
-      for (const tab of group) {
-        if (!keepIds.has(tab.id)) {
-          toCloseIds.push(tab.id);
-        }
-      }
-    }
-
-    return { toCloseIds, count: toCloseIds.length, groups };
   }
 
   async function updateDuplicatesMenu() {
@@ -431,6 +329,7 @@ document.addEventListener("DOMContentLoaded", function () {
     menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       refreshMemBar();
+      updateUnloadMenuSummaries();
       updateDuplicatesMenu();
     } else if (!memBarPinned) {
       setMemBarVisible(false);
@@ -440,31 +339,6 @@ document.addEventListener("DOMContentLoaded", function () {
   function setWindowPickerOpen(open) {
     if (!windowPicker) return;
     windowPicker.hidden = !open;
-  }
-
-  /**
-   * Label for a browser window. Prefers windows.Window.title, which includes
-   * Window Titler’s titlePreface (custom window names show in the OS title bar).
-   * We cannot read Window Titler’s private sessions storage from another add-on.
-   */
-  function formatWindowLabel(win, activeTab) {
-    let label = (win && win.title) || "";
-    if (label) {
-      label = label
-        .replace(/\s*[-–—]\s*Mozilla Firefox\s*$/i, "")
-        .replace(/\s*[-–—]\s*Firefox Developer Edition\s*$/i, "")
-        .replace(/\s*[-–—]\s*Firefox Nightly\s*$/i, "")
-        .replace(/\s*[-–—]\s*Firefox\s*$/i, "")
-        .replace(/\s*[-–—]\s*Nightly\s*$/i, "")
-        .trim();
-    }
-    if (!label && activeTab) {
-      label = activeTab.title || activeTab.url || "";
-    }
-    if (!label) {
-      label = "Window " + (win && win.id != null ? win.id : "?");
-    }
-    return label;
   }
 
   async function showWindowPicker() {
@@ -477,7 +351,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const [currentWin, windows, allTabs] = await Promise.all([
       browser.windows.getCurrent(),
-      // populate + tabs permission: Window.title is available (includes titlePreface)
       browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
       browser.tabs.query({}),
     ]);
@@ -488,45 +361,30 @@ document.addEventListener("DOMContentLoaded", function () {
       tabsByWindow[tab.windowId].push(tab);
     }
 
-    const rows = windows.map((win) => {
-      const tabs = tabsByWindow[win.id] || win.tabs || [];
-      const active = tabs.find((t) => t.active);
-      const loaded = tabs.filter((t) => !t.discarded).length;
-      const unloadable = tabs.filter(
-        (t) =>
-          (!active || t.id !== active.id) &&
-          !t.pinned &&
-          !t.discarded &&
-          isDiscardableUrl(t.url)
-      ).length;
-      return { win, tabs, active, loaded, unloadable };
-    });
+    const rows = Core.buildWindowUnloadRows(
+      windows,
+      tabsByWindow,
+      currentWin && currentWin.id
+    );
 
-    // Most tabs to unload first
-    rows.sort((a, b) => {
-      if (b.unloadable !== a.unloadable) return b.unloadable - a.unloadable;
-      return (a.win.id || 0) - (b.win.id || 0);
-    });
-
-    rows.forEach(({ win, tabs, active, loaded, unloadable }) => {
+    rows.forEach(({ win, tabs, active, loaded, unloadable, isCurrent, label }) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "window-picker-item";
-      if (currentWin && win.id === currentWin.id) {
+      if (isCurrent) {
         btn.classList.add("is-current");
       }
 
       const title = document.createElement("span");
       title.className = "window-picker-item-title";
-      title.textContent = formatWindowLabel(win, active);
-      title.title = (win && win.title) || title.textContent;
+      title.textContent = label;
+      title.title = (win && win.title) || label;
 
       const meta = document.createElement("span");
       meta.className = "window-picker-item-meta";
       meta.textContent =
-        "can unload " +
         unloadable +
-        " · " +
+        " tabs will be unloaded from memory · " +
         tabs.length +
         " tabs · " +
         loaded +
@@ -883,7 +741,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const actionsCell = document.createElement("td");
 
     const switchButton = document.createElement("button");
-    switchButton.textContent = "Switch";
+    switchButton.textContent = "↗ Switch";
     switchButton.classList.add("action-button");
     switchButton.onclick = (e) => {
       e.stopPropagation();
@@ -892,7 +750,7 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsCell.appendChild(switchButton);
 
     const closeButton = document.createElement("button");
-    closeButton.textContent = "Close";
+    closeButton.textContent = "✕ Close";
     closeButton.classList.add("action-button");
     closeButton.onclick = async (e) => {
       e.stopPropagation();
@@ -913,12 +771,18 @@ document.addEventListener("DOMContentLoaded", function () {
     // Date cells (Last Opened first)
     const lastDate = document.createElement("td");
     lastDate.classList.add("col-date");
-    lastDate.textContent = formatShortDate(tabInfo.lastOpenedTs, tabInfo.lastOpened || "");
+    lastDate.textContent = Core.formatShortDate(
+      tabInfo.lastOpenedTs,
+      tabInfo.lastOpened || ""
+    );
     row.appendChild(lastDate);
 
     const firstDate = document.createElement("td");
     firstDate.classList.add("col-date");
-    firstDate.textContent = formatShortDate(tabInfo.firstOpenedTs, tabInfo.firstOpened || "");
+    firstDate.textContent = Core.formatShortDate(
+      tabInfo.firstOpenedTs,
+      tabInfo.firstOpened || ""
+    );
     row.appendChild(firstDate);
 
     // Tab info cell
@@ -1013,7 +877,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const clearBtn = document.createElement("button");
       clearBtn.type = "button";
       clearBtn.className = "empty-clear-filters";
-      clearBtn.textContent = "Clear filters";
+      clearBtn.textContent = "✕ Clear filters";
       clearBtn.addEventListener("click", async () => {
         searchInput.value = "";
         showOnlyAudible = false;
@@ -1081,7 +945,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const row = createTabRow(tabKey, tabInfo);
 
       // Apply continuous age background using data-driven min/max
-      const bg = getAgeBackground(tabInfo.lastOpenedTs, minTs, maxTs);
+      const bg = Core.getAgeBackground(tabInfo.lastOpenedTs, minTs, maxTs);
       if (bg) row.style.backgroundColor = bg;
 
       fragment.appendChild(row);

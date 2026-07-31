@@ -44,12 +44,18 @@
         >☰</button>
         <div id="actions-menu" class="actions-menu" hidden role="menu">
           <button type="button" class="actions-menu-item" data-action="unload-all-others" role="menuitem">
-            Unload from memory (all others)
-            <span class="actions-menu-hint">all windows · free RAM · keep this tab loaded</span>
+            <span class="actions-menu-icon" aria-hidden="true">💤</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Unload other tabs from memory</span>
+              <span id="unload-all-summary" class="actions-menu-hint">Counting tabs…</span>
+            </span>
           </button>
           <button type="button" class="actions-menu-item" data-action="unload-window" role="menuitem">
-            Unload from memory in a window…
-            <span class="actions-menu-hint">pick a window · free RAM · keep its active tab</span>
+            <span class="actions-menu-icon" aria-hidden="true">🪟</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Unload tabs from memory in a window…</span>
+              <span class="actions-menu-hint">pick a window · free RAM · keep its active tab</span>
+            </span>
           </button>
           <div class="actions-menu-divider" role="separator"></div>
           <div id="dupes-summary" class="actions-menu-dupes">Checking duplicates…</div>
@@ -61,8 +67,11 @@
             role="menuitem"
             disabled
           >
-            Close duplicate tabs
-            <span class="actions-menu-hint">keep newest last-opened · close older same-URL copies</span>
+            <span class="actions-menu-icon" aria-hidden="true">🧹</span>
+            <span class="actions-menu-body">
+              <span class="actions-menu-label">Close duplicate tabs</span>
+              <span class="actions-menu-hint">keep newest last-opened · close older same-URL copies</span>
+            </span>
           </button>
         </div>
       </div>
@@ -77,7 +86,7 @@
         <span class="window-picker-title">Unload from memory in a window</span>
         <button type="button" id="window-picker-cancel" class="window-picker-cancel">Cancel</button>
       </div>
-      <p class="window-picker-help">Frees memory by unloading tabs (they stay open). Keeps that window’s active tab loaded. Skips pinned &amp; already sleeping tabs.</p>
+      <p class="window-picker-help">Frees memory by unloading tabs from RAM (tabs stay open in the strip). Keeps that window’s active tab loaded. Skips pinned &amp; already sleeping tabs.</p>
       <div id="window-picker-list" class="window-picker-list"></div>
     </div>
 
@@ -114,6 +123,7 @@
     ><span class="kofi-icon" aria-hidden="true">☕</span><span class="kofi-label">ko-fi</span></button>
 
     <script src="browser-polyfill.js"></script>
+    <script src="lib/core.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
