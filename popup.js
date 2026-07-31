@@ -297,6 +297,31 @@ document.addEventListener("DOMContentLoaded", function () {
     windowPicker.hidden = !open;
   }
 
+  /**
+   * Label for a browser window. Prefers windows.Window.title, which includes
+   * Window Titler’s titlePreface (custom window names show in the OS title bar).
+   * We cannot read Window Titler’s private sessions storage from another add-on.
+   */
+  function formatWindowLabel(win, activeTab) {
+    let label = (win && win.title) || "";
+    if (label) {
+      label = label
+        .replace(/\s*[-–—]\s*Mozilla Firefox\s*$/i, "")
+        .replace(/\s*[-–—]\s*Firefox Developer Edition\s*$/i, "")
+        .replace(/\s*[-–—]\s*Firefox Nightly\s*$/i, "")
+        .replace(/\s*[-–—]\s*Firefox\s*$/i, "")
+        .replace(/\s*[-–—]\s*Nightly\s*$/i, "")
+        .trim();
+    }
+    if (!label && activeTab) {
+      label = activeTab.title || activeTab.url || "";
+    }
+    if (!label) {
+      label = "Window " + (win && win.id != null ? win.id : "?");
+    }
+    return label;
+  }
+
   async function showWindowPicker() {
     if (!windowPickerList) return;
     setMenuOpen(false);
@@ -307,6 +332,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const [currentWin, windows, allTabs] = await Promise.all([
       browser.windows.getCurrent(),
+      // populate + tabs permission: Window.title is available (includes titlePreface)
       browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
       browser.tabs.query({}),
     ]);
@@ -317,65 +343,71 @@ document.addEventListener("DOMContentLoaded", function () {
       tabsByWindow[tab.windowId].push(tab);
     }
 
-    windows
-      .slice()
-      .sort((a, b) => (a.id || 0) - (b.id || 0))
-      .forEach((win) => {
-        const tabs = tabsByWindow[win.id] || win.tabs || [];
-        const active = tabs.find((t) => t.active);
-        const loaded = tabs.filter((t) => !t.discarded).length;
-        const unloadable = tabs.filter(
-          (t) =>
-            (!active || t.id !== active.id) &&
-            !t.pinned &&
-            !t.discarded &&
-            isDiscardableUrl(t.url)
-        ).length;
+    const rows = windows.map((win) => {
+      const tabs = tabsByWindow[win.id] || win.tabs || [];
+      const active = tabs.find((t) => t.active);
+      const loaded = tabs.filter((t) => !t.discarded).length;
+      const unloadable = tabs.filter(
+        (t) =>
+          (!active || t.id !== active.id) &&
+          !t.pinned &&
+          !t.discarded &&
+          isDiscardableUrl(t.url)
+      ).length;
+      return { win, tabs, active, loaded, unloadable };
+    });
 
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "window-picker-item";
-        if (currentWin && win.id === currentWin.id) {
-          btn.classList.add("is-current");
-        }
+    // Most tabs to unload first
+    rows.sort((a, b) => {
+      if (b.unloadable !== a.unloadable) return b.unloadable - a.unloadable;
+      return (a.win.id || 0) - (b.win.id || 0);
+    });
 
-        const title = document.createElement("span");
-        title.className = "window-picker-item-title";
-        title.textContent =
-          (active && active.title) ||
-          (active && active.url) ||
-          "Window " + win.id;
+    rows.forEach(({ win, tabs, active, loaded, unloadable }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "window-picker-item";
+      if (currentWin && win.id === currentWin.id) {
+        btn.classList.add("is-current");
+      }
 
-        const meta = document.createElement("span");
-        meta.className = "window-picker-item-meta";
-        meta.textContent =
-          tabs.length +
-          " tabs · " +
-          loaded +
-          " loaded · can unload " +
-          unloadable;
+      const title = document.createElement("span");
+      title.className = "window-picker-item-title";
+      title.textContent = formatWindowLabel(win, active);
+      title.title = (win && win.title) || title.textContent;
 
-        btn.appendChild(title);
-        btn.appendChild(meta);
+      const meta = document.createElement("span");
+      meta.className = "window-picker-item-meta";
+      meta.textContent =
+        "can unload " +
+        unloadable +
+        " · " +
+        tabs.length +
+        " tabs · " +
+        loaded +
+        " loaded";
 
-        btn.addEventListener("click", async () => {
-          btn.disabled = true;
-          try {
-            const result = await unloadInWindow(win.id);
-            setWindowPickerOpen(false);
-            await reloadTabListFromBrowser();
-            await refreshMemBar({ unloaded: result.unloaded });
-          } catch (err) {
-            console.error("Unload window failed:", err);
-            btn.disabled = false;
-            if (memStatsEl) {
-              memStatsEl.textContent = "Unload failed: " + err;
-            }
+      btn.appendChild(title);
+      btn.appendChild(meta);
+
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const result = await unloadInWindow(win.id);
+          setWindowPickerOpen(false);
+          await reloadTabListFromBrowser();
+          await refreshMemBar({ unloaded: result.unloaded });
+        } catch (err) {
+          console.error("Unload window failed:", err);
+          btn.disabled = false;
+          if (memStatsEl) {
+            memStatsEl.textContent = "Unload failed: " + err;
           }
-        });
-
-        windowPickerList.appendChild(btn);
+        }
       });
+
+      windowPickerList.appendChild(btn);
+    });
 
     setWindowPickerOpen(true);
   }
