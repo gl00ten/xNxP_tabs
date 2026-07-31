@@ -74,11 +74,14 @@ async function loadTabsDirectly() {
     };
   }
 
-  // Keep storage in sync for the background listeners (best effort)
-  browser.storage.local.set({ tabInfoList: list }).catch(() => {});
+  // Defer full storage write so first paint isn't competing with a huge write
+  // (tabInfoList can be large with 1k+ tabs).
+  setTimeout(() => {
+    browser.storage.local.set({ tabInfoList: list }).catch(() => {});
+  }, 0);
 
-  // Nudge background memory to match (ignore failures — popup already has data)
-  browser.runtime.sendMessage({ type: "getTabInfo" }).catch(() => {});
+  // Do NOT send getTabInfo here — that re-runs a full syncActiveTabs in the
+  // background and doubles work on every open.
 
   return {
     tabInfoList: list,
@@ -914,6 +917,10 @@ document.addEventListener("DOMContentLoaded", function () {
     header.addEventListener("click", handleTableHeaderClick);
   });
 
+  // Cancel in-flight chunked renders when filters/sort change
+  let renderGeneration = 0;
+  const RENDER_CHUNK_SIZE = 60;
+
   function createTabRow(tabKey, tabInfo) {
     const row = document.createElement("tr");
 
@@ -975,11 +982,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const titleDiv = document.createElement("div");
     titleDiv.classList.add("tab-title");
 
-    if (tabInfo.favIconUrl) {
+    // Skip favicons for unloaded tabs — fewer image loads when most tabs are sleeping
+    if (tabInfo.favIconUrl && !tabInfo.discarded) {
       const favicon = document.createElement("img");
       favicon.classList.add("tab-favicon");
       favicon.src = tabInfo.favIconUrl;
       favicon.alt = "";
+      favicon.loading = "lazy";
       titleDiv.appendChild(favicon);
     }
 
@@ -1084,6 +1093,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function renderTable() {
+    const generation = ++renderGeneration;
+
     const countEl = document.getElementById("visible-tab-count");
     if (countEl) {
       const newCount = filteredTabEntries.length;
@@ -1093,9 +1104,11 @@ document.addEventListener("DOMContentLoaded", function () {
         // Defer animation so we don't force layout before stylesheets settle
         // (avoids "Layout was forced before the page was fully loaded" warnings).
         requestAnimationFrame(() => {
+          if (generation !== renderGeneration) return;
           countEl.style.transition = "none";
           countEl.style.transform = "scale(1.15)";
           requestAnimationFrame(() => {
+            if (generation !== renderGeneration) return;
             countEl.style.transition =
               "transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)";
             countEl.style.transform = "scale(1)";
@@ -1123,20 +1136,39 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
 
-    const fragment = document.createDocumentFragment();
-    filteredTabEntries.forEach(([tabKey, tabInfo]) => {
-      const row = createTabRow(tabKey, tabInfo);
+    const total = filteredTabEntries.length;
+    if (total === 0) {
+      updateEmptyState();
+      return;
+    }
 
-      const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
-      if (age) {
-        row.style.backgroundColor = age.wash;
+    // Chunked paint so the popup feels responsive with 1k+ tabs
+    // (same idea as Tabhunter's list builder).
+    let index = 0;
+    function paintChunk() {
+      if (generation !== renderGeneration) return;
+
+      const fragment = document.createDocumentFragment();
+      const end = Math.min(index + RENDER_CHUNK_SIZE, total);
+      for (; index < end; index++) {
+        const [tabKey, tabInfo] = filteredTabEntries[index];
+        const row = createTabRow(tabKey, tabInfo);
+        const age = Core.getAgeColors(tabInfo.lastOpenedTs, minTs, maxTs);
+        if (age) {
+          row.style.backgroundColor = age.wash;
+        }
+        fragment.appendChild(row);
       }
+      tableBody.appendChild(fragment);
 
-      fragment.appendChild(row);
-    });
-    tableBody.appendChild(fragment);
+      if (index < total) {
+        requestAnimationFrame(paintChunk);
+      } else {
+        updateEmptyState();
+      }
+    }
 
-    updateEmptyState();
+    paintChunk();
   }
 
   function applyFilters() {
