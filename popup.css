@@ -154,6 +154,22 @@ body {
   color: #7a4a00;
 }
 
+.empty-clear-filters {
+  margin-left: 6px;
+  border: 1px solid #e0a84a;
+  background: white;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #7a4a00;
+  cursor: pointer;
+}
+
+.empty-clear-filters:hover {
+  background: #fff8ec;
+}
+
 .debug-panel {
   display: flex;
   align-items: center;

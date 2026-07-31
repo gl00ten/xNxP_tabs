@@ -37,42 +37,92 @@ function formatShortDate(timestamp, fallbackText = "") {
   return `${year}.${month}.${day} ${hour}:${minute}`;
 }
 
-/** Normalize background responses (new structured + legacy plain object). */
-function normalizeTabInfoResponse(response) {
-  if (!response || typeof response !== "object") {
-    return {
-      ok: false,
-      tabInfoList: {},
-      error: "Empty response from background",
-      meta: {},
+/**
+ * Load open tabs from the browser itself (like Tabhunter).
+ * Does not depend on the background page being awake.
+ * Merges first/last-opened history from storage when available.
+ */
+async function loadTabsDirectly() {
+  const started = Date.now();
+  const tabs = await browser.tabs.query({});
+  const stored = await browser.storage.local.get("tabInfoList");
+  const old = stored.tabInfoList && typeof stored.tabInfoList === "object"
+    ? stored.tabInfoList
+    : {};
+
+  // URL → pool of historical records (for session restore / tab id churn)
+  const oldByUrl = {};
+  for (const key of Object.keys(old)) {
+    const rec = old[key];
+    if (!rec) continue;
+    const url = rec.url || "";
+    if (!oldByUrl[url]) oldByUrl[url] = [];
+    oldByUrl[url].push(rec);
+  }
+
+  const now = Date.now();
+  const nowStr = new Date().toLocaleString();
+  const list = {};
+
+  for (const tab of tabs) {
+    const key = String(tab.id);
+    let prev = old[key] || null;
+
+    if (!prev) {
+      const url = tab.url || "";
+      const pool = oldByUrl[url];
+      if (pool && pool.length > 0) {
+        prev = pool.reduce((best, cur) => {
+          const bestTs = best.firstOpenedTs || Infinity;
+          const curTs = cur.firstOpenedTs || Infinity;
+          return curTs < bestTs ? cur : best;
+        });
+        const idx = pool.indexOf(prev);
+        if (idx > -1) pool.splice(idx, 1);
+      }
+    }
+
+    const firstOpened = prev?.firstOpened || nowStr;
+    const firstOpenedTs = prev?.firstOpenedTs || now;
+    let lastOpened = prev?.lastOpened || "";
+    let lastOpenedTs = prev?.lastOpenedTs || 0;
+    if (!lastOpened && firstOpened) {
+      lastOpened = firstOpened;
+      lastOpenedTs = firstOpenedTs;
+    }
+    if (!lastOpened) {
+      lastOpened = nowStr;
+      lastOpenedTs = now;
+    }
+
+    list[key] = {
+      id: tab.id,
+      windowId: tab.windowId,
+      title: tab.title || "",
+      url: tab.url || "",
+      favIconUrl: tab.favIconUrl || prev?.favIconUrl || "",
+      audible: !!tab.audible,
+      firstOpened,
+      firstOpenedTs,
+      lastOpened,
+      lastOpenedTs,
     };
   }
 
-  // New format
-  if (Object.prototype.hasOwnProperty.call(response, "tabInfoList")) {
-    return {
-      ok: response.ok !== false,
-      tabInfoList: response.tabInfoList || {},
-      error: response.error || null,
-      meta: response.meta || {},
-    };
-  }
+  // Keep storage in sync for the background listeners (best effort)
+  browser.storage.local.set({ tabInfoList: list }).catch(() => {});
 
-  // Legacy: background returned the map directly
-  if (response.error && Object.keys(response).length <= 2) {
-    return {
-      ok: false,
-      tabInfoList: {},
-      error: String(response.error),
-      meta: {},
-    };
-  }
+  // Nudge background memory to match (ignore failures — popup already has data)
+  browser.runtime.sendMessage({ type: "getTabInfo" }).catch(() => {});
 
   return {
-    ok: true,
-    tabInfoList: response,
-    error: null,
-    meta: {},
+    tabInfoList: list,
+    meta: {
+      openTabs: tabs.length,
+      tracked: Object.keys(list).length,
+      ms: Date.now() - started,
+      source: "popup-direct",
+    },
   };
 }
 
@@ -204,20 +254,21 @@ document.addEventListener("DOMContentLoaded", function () {
       personalBest = bestResult.personalBest || 0;
       updatePersonalBestDisplay();
 
-      const rawResponse = await browser.runtime.sendMessage({ type: "getTabInfo" });
-      const normalized = normalizeTabInfoResponse(rawResponse);
-      tabInfoList = normalized.tabInfoList || {};
-      loadError = normalized.ok ? null : (normalized.error || "Unknown load error");
-      lastMeta = normalized.meta || {};
+      // Primary path: query tabs in the popup (works even if background is stuck
+      // after an extension reload — no Firefox restart needed).
+      const direct = await loadTabsDirectly();
+      tabInfoList = direct.tabInfoList || {};
+      loadError = null;
+      lastMeta = direct.meta || {};
 
       if (debugMode) {
         setDebugStatus(
-          (normalized.ok ? "ok" : "ERR") +
-            " tracked=" +
+          "ok tracked=" +
             Object.keys(tabInfoList).length +
             (lastMeta.openTabs != null ? " open=" + lastMeta.openTabs : "") +
             (lastMeta.ms != null ? " " + lastMeta.ms + "ms" : "") +
-            (lastMeta.fallback ? " fallback" : "")
+            " " +
+            (lastMeta.source || "")
         );
       }
 
@@ -396,17 +447,38 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (total > 0 && (searchInput.value || showOnlyAudible)) {
       emptyState.dataset.kind = "filter";
-      emptyState.textContent =
+      emptyState.textContent = "";
+
+      const msg = document.createElement("span");
+      msg.textContent =
         "No tabs match your filters (" +
         total +
-        " open). Clear search" +
-        (showOnlyAudible ? " or turn off “Playing audio”" : "") +
-        ".";
+        " open). ";
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "empty-clear-filters";
+      clearBtn.textContent = "Clear filters";
+      clearBtn.addEventListener("click", async () => {
+        searchInput.value = "";
+        showOnlyAudible = false;
+        if (audioFilterCheckbox) audioFilterCheckbox.checked = false;
+        await browser.storage.local.set({
+          popupSearch: "",
+          popupShowOnlyAudible: false,
+        });
+        applyFilters();
+        renderTable();
+      });
+
+      emptyState.appendChild(msg);
+      emptyState.appendChild(clearBtn);
       return;
     }
 
     emptyState.dataset.kind = "empty";
-    emptyState.textContent = "No tabs found. If you have tabs open, try reopening the popup.";
+    emptyState.textContent =
+      "No tabs found. If you have tabs open, remove and re-load this temporary add-on (about:debugging), or restart Firefox once.";
   }
 
   function renderTable() {
