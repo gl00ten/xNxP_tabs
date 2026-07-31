@@ -136,6 +136,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugPanel = document.getElementById("debug-panel");
   const debugModeCheckbox = document.getElementById("debug-mode-checkbox");
   const debugCopyBtn = document.getElementById("debug-copy-btn");
+  const debugHideBtn = document.getElementById("debug-hide-btn");
   const debugStatus = document.getElementById("debug-status");
   const brandEl = document.querySelector(".brand");
 
@@ -156,13 +157,44 @@ document.addEventListener("DOMContentLoaded", function () {
   let debugMode = false;
   let debugPanelVisible = false;
 
-  // Double-click brand to show/hide the debug panel (keeps UI clean by default)
+  function showDebugPanel(show) {
+    debugPanelVisible = !!show;
+    updateDebugPanelVisibility();
+    if (show) {
+      setDebugStatus(
+        "tracked=" +
+          Object.keys(tabInfoList).length +
+          (lastMeta.openTabs != null ? " open=" + lastMeta.openTabs : "") +
+          (lastMeta.source ? " " + lastMeta.source : "")
+      );
+    }
+  }
+
+  // Brand: double-click OR Alt+click opens debug (panel is under the header)
   if (brandEl) {
-    brandEl.style.cursor = "default";
-    brandEl.title = "Double-click for debug tools";
-    brandEl.addEventListener("dblclick", () => {
-      debugPanelVisible = !debugPanelVisible;
-      updateDebugPanelVisibility();
+    brandEl.style.cursor = "pointer";
+    brandEl.title = "Alt+click or double-click for debug tools";
+    brandEl.addEventListener("click", (e) => {
+      if (e.altKey) {
+        e.preventDefault();
+        showDebugPanel(!debugPanelVisible);
+      }
+    });
+    brandEl.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      showDebugPanel(!debugPanelVisible);
+    });
+  }
+
+  // Triple-click the tab count as another easy way to open debug
+  const countElForDebug = document.getElementById("visible-tab-count");
+  if (countElForDebug) {
+    countElForDebug.title = "Triple-click for debug tools";
+    countElForDebug.style.cursor = "pointer";
+    countElForDebug.addEventListener("click", (e) => {
+      if (e.detail === 3) {
+        showDebugPanel(!debugPanelVisible);
+      }
     });
   }
 
@@ -175,7 +207,7 @@ document.addEventListener("DOMContentLoaded", function () {
           enabled: debugMode,
         });
         await browser.storage.local.set({ debugMode });
-        setDebugStatus(debugMode ? "Debug on — open popup again after issues" : "Debug off");
+        setDebugStatus(debugMode ? "Debug on — leave on while reproducing issues" : "Debug off");
       } catch (err) {
         setDebugStatus("Failed to set debug: " + err);
       }
@@ -185,9 +217,15 @@ document.addEventListener("DOMContentLoaded", function () {
   if (debugCopyBtn) {
     debugCopyBtn.addEventListener("click", async () => {
       try {
-        const report = await browser.runtime.sendMessage({ type: "getDebugReport" });
+        let reportPart = {};
+        try {
+          const report = await browser.runtime.sendMessage({ type: "getDebugReport" });
+          reportPart = report && report.report ? report.report : report || {};
+        } catch (bgErr) {
+          reportPart = { backgroundError: String(bgErr) };
+        }
         const payload = {
-          ...(report && report.report ? report.report : report),
+          ...reportPart,
           popup: {
             visibleCount: filteredTabEntries.length,
             trackedCount: Object.keys(tabInfoList).length,
@@ -208,12 +246,20 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  if (debugHideBtn) {
+    debugHideBtn.addEventListener("click", () => {
+      showDebugPanel(false);
+    });
+  }
+
   function updateDebugPanelVisibility() {
     if (!debugPanel) return;
     if (debugPanelVisible || debugMode) {
       debugPanel.hidden = false;
+      debugPanel.removeAttribute("hidden");
     } else {
       debugPanel.hidden = true;
+      debugPanel.setAttribute("hidden", "");
     }
   }
 

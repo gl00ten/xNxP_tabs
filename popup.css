@@ -174,16 +174,19 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 var(--space-m) 22px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: rgba(16, 32, 51, 0.06);
+  margin: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: #f3f7fc;
   font-size: 10px;
   color: var(--muted);
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .debug-panel[hidden] {
-  display: none;
+  display: none !important;
 }
 
 .debug-toggle {
