@@ -40,12 +40,10 @@ document.addEventListener("DOMContentLoaded", function () {
   const debugCopyBtn = document.getElementById("debug-copy-btn");
   const debugHideBtn = document.getElementById("debug-hide-btn");
   const debugStatus = document.getElementById("debug-status");
-  const debugOpenCountEl = document.getElementById("debug-open-count");
   const debugOpenCountInput = document.getElementById("debug-open-count-input");
   const debugOpenCountSet = document.getElementById("debug-open-count-set");
-  const debugTip2 = document.getElementById("debug-tip-2");
-  const debugTip6 = document.getElementById("debug-tip-6");
-  const debugTip14 = document.getElementById("debug-tip-14");
+  const debugPersonalBestInput = document.getElementById("debug-personal-best-input");
+  const debugPersonalBestSet = document.getElementById("debug-personal-best-set");
   const menuBtn = document.getElementById("menu-btn");
   const actionsMenu = document.getElementById("actions-menu");
   const memBar = document.getElementById("mem-bar");
@@ -200,12 +198,12 @@ document.addEventListener("DOMContentLoaded", function () {
         memStatsEl.appendChild(delta);
         memBarPinned = true;
       }
-    } catch (err) {
+    } catch (_) {
       memStatsEl.textContent = "Could not read tab stats";
     }
   }
 
-  async function discardInChunks(tabIds, chunkSize = 80) {
+  function discardInChunks(tabIds, chunkSize = 80) {
     const oneByOne = Core.shouldDiscardOneByOne(
       typeof navigator !== "undefined" ? navigator.userAgent : ""
     );
@@ -238,8 +236,15 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function analyzeDuplicates() {
-    const tabs = await browser.tabs.query({});
-    return Core.analyzeDuplicates(tabs, tabInfoList);
+    const [tabs, currentWindow] = await Promise.all([
+      browser.tabs.query({}),
+      browser.windows.getCurrent(),
+    ]);
+    return Core.analyzeDuplicates(
+      tabs,
+      tabInfoList,
+      currentWindow && currentWindow.id
+    );
   }
 
   async function updateUnloadMenuSummaries() {
@@ -271,7 +276,7 @@ document.addEventListener("DOMContentLoaded", function () {
           (count === 1 ? "" : "s") +
           " will be unloaded";
       }
-    } catch (err) {
+    } catch (_) {
       unloadAllSummary.textContent = "Could not count tabs";
     }
   }
@@ -377,25 +382,14 @@ document.addEventListener("DOMContentLoaded", function () {
       windowPickerList.removeChild(windowPickerList.firstChild);
     }
 
-    const [currentWin, windows, allTabs] = await Promise.all([
+    const [currentWin, windows] = await Promise.all([
       browser.windows.getCurrent(),
       browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
-      browser.tabs.query({}),
     ]);
 
-    const tabsByWindow = {};
-    for (const tab of allTabs) {
-      if (!tabsByWindow[tab.windowId]) tabsByWindow[tab.windowId] = [];
-      tabsByWindow[tab.windowId].push(tab);
-    }
+    const rows = Core.buildWindowUnloadRows(windows, currentWin && currentWin.id);
 
-    const rows = Core.buildWindowUnloadRows(
-      windows,
-      tabsByWindow,
-      currentWin && currentWin.id
-    );
-
-    rows.forEach(({ win, tabs, active, loaded, unloadable, isCurrent, label }) => {
+    rows.forEach(({ win, tabs, loaded, unloadable, isCurrent, label }) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "window-picker-item";
@@ -484,16 +478,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (action === "close-duplicates") {
         if (!lastDupesAnalysis.count) return;
-        const n = lastDupesAnalysis.count;
-        const ok = confirm(
-          "Close " +
-            n +
-            " duplicate tab" +
-            (n === 1 ? "" : "s") +
-            "?\n\nFor each URL, we keep the tab you used most recently and close older copies. Pinned and active tabs are always kept."
-        );
-        if (!ok) return;
-
         item.disabled = true;
         setMenuOpen(false);
         try {
@@ -557,42 +541,50 @@ document.addEventListener("DOMContentLoaded", function () {
   let debugMode = false;
   let debugPanelVisible = false;
 
-  async function refreshDebugOpenCount() {
-    try {
-      const stored = await browser.storage.local.get("popupOpenCount");
-      const n = stored.popupOpenCount || 0;
-      if (debugOpenCountEl) debugOpenCountEl.textContent = String(n);
-      if (debugOpenCountInput && document.activeElement !== debugOpenCountInput) {
-        debugOpenCountInput.value = String(n);
-      }
-      return n;
-    } catch (_) {
-      return 0;
+  function toNonNegativeInteger(value) {
+    return Math.max(0, Math.floor(Number(value)) || 0);
+  }
+
+  async function refreshDebugFields() {
+    const stored = await browser.storage.local.get([
+      "popupOpenCount",
+      "personalBest",
+    ]);
+    if (debugOpenCountInput) {
+      debugOpenCountInput.value = String(stored.popupOpenCount || 0);
+    }
+    if (debugPersonalBestInput) {
+      debugPersonalBestInput.value = String(stored.personalBest || 0);
     }
   }
 
-  async function setPopupOpenCount(value) {
-    const n = Math.max(0, Math.floor(Number(value)) || 0);
-    await browser.storage.local.set({ popupOpenCount: n });
-    await refreshDebugOpenCount();
-    setDebugStatus("popupOpenCount = " + n + " (tips at 2, 6, 14)");
-    return n;
+  if (debugOpenCountSet) {
+    debugOpenCountSet.addEventListener("click", async () => {
+      const value = toNonNegativeInteger(debugOpenCountInput.value);
+      await browser.storage.local.set({ popupOpenCount: value });
+      debugOpenCountInput.value = String(value);
+      setDebugStatus("Popup opens set to " + value + " · tips appear at 2, 6, 14");
+    });
   }
 
-  async function forceSpeechTip(openNumber) {
-    await setPopupOpenCount(openNumber);
-    const msg =
-      SPEECH_MESSAGES[openNumber] ||
-      "Psst — try the ☰ menu on the right. This extension does more stuff!";
-    showSpeechBubble(msg);
-    setDebugStatus("Forced tip for open #" + openNumber);
+  if (debugPersonalBestSet) {
+    debugPersonalBestSet.addEventListener("click", async () => {
+      const value = toNonNegativeInteger(debugPersonalBestInput.value);
+      personalBest = value;
+      await browser.storage.local.set({ personalBest: value });
+      debugPersonalBestInput.value = String(value);
+      updatePersonalBestDisplay();
+      setDebugStatus("Personal best set to " + value);
+    });
   }
 
   function showDebugPanel(show) {
     debugPanelVisible = !!show;
     updateDebugPanelVisibility();
     if (show) {
-      refreshDebugOpenCount();
+      refreshDebugFields().catch((err) => {
+        setDebugStatus("Could not load debug values: " + err);
+      });
       setDebugStatus(
         "tracked=" +
           Object.keys(tabInfoList).length +
@@ -600,32 +592,6 @@ document.addEventListener("DOMContentLoaded", function () {
           (lastMeta.source ? " " + lastMeta.source : "")
       );
     }
-  }
-
-  if (debugOpenCountSet) {
-    debugOpenCountSet.addEventListener("click", async () => {
-      const raw = debugOpenCountInput ? debugOpenCountInput.value : "0";
-      await setPopupOpenCount(raw);
-    });
-  }
-
-  if (debugOpenCountInput) {
-    debugOpenCountInput.addEventListener("keydown", async (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        await setPopupOpenCount(debugOpenCountInput.value);
-      }
-    });
-  }
-
-  if (debugTip2) {
-    debugTip2.addEventListener("click", () => forceSpeechTip(2));
-  }
-  if (debugTip6) {
-    debugTip6.addEventListener("click", () => forceSpeechTip(6));
-  }
-  if (debugTip14) {
-    debugTip14.addEventListener("click", () => forceSpeechTip(14));
   }
 
   // Hidden entry: four rapid clicks on the logo (left icon + title) toggles debug.
@@ -691,9 +657,6 @@ document.addEventListener("DOMContentLoaded", function () {
             sortOrder,
             loadError,
             lastMeta,
-            popupOpenCount: debugOpenCountEl
-              ? debugOpenCountEl.textContent
-              : undefined,
           },
         };
         const text = JSON.stringify(payload, null, 2);
@@ -1028,7 +991,7 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       await browser.tabs.update(tabInfo.id, { active: true });
       await browser.windows.update(tabInfo.windowId, { focused: true });
-      window.close();
+      globalThis.close();
     } catch (err) {
       console.error("Failed to switch to tab:", err);
     }
@@ -1196,7 +1159,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function handleTableHeaderClick(event) {
-    let sortAttribute = event.currentTarget.getAttribute("data-sort");
+    const sortAttribute = event.currentTarget.getAttribute("data-sort");
 
     sortOrder = sortField === sortAttribute ? -sortOrder : 1;
     sortField = sortAttribute;
