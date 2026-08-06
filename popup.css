@@ -80,7 +80,8 @@ html {
 }
 
 body {
-  width: 800px; /* more realistic for extension popups — browsers often cap around here */
+  /* Leave room below Chromium's popup-width ceiling for its scrollbar. */
+  width: 780px;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
