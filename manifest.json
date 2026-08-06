@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "xNxP Tabs",
-  "version": "1.1.35",
+  "version": "1.1.36",
   "description": "ADHD friendly tabs: search, unload for RAM, close dupes, age by last open. Ctrl+Shift+U. Pin it. Report Chrome bugs.",
   "icons": {
     "16": "icons/icon16.png",

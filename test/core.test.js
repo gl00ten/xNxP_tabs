@@ -381,7 +381,7 @@ describe("selectUnloadListedIds", () => {
       { id: 3, url: "https://c.com", active: false, windowId: 1, pinned: false, discarded: false },
       { id: 4, url: "https://d.com", active: false, windowId: 2, pinned: false, discarded: false },
     ];
-    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4], null);
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4]);
     assert.deepEqual(ids.sort((a, b) => a - b), [3, 4]);
     assert.ok(!ids.includes(1));
     assert.ok(!ids.includes(2));
@@ -393,7 +393,7 @@ describe("selectUnloadListedIds", () => {
       { id: 2, url: "https://b.com", active: false, pinned: false, discarded: false },
       { id: 3, url: "https://c.com", active: false, pinned: false, discarded: false },
     ];
-    const ids = core.selectUnloadListedIds(tabs, [1, 2], null);
+    const ids = core.selectUnloadListedIds(tabs, [1, 2]);
     assert.deepEqual(ids.sort((a, b) => a - b), [1, 2]);
   });
 });
@@ -547,7 +547,7 @@ describe("Chrome discard calls (tabs.discard)", () => {
     ];
     const listedIds = [100, 101, 102, 103];
 
-    const n = await core.unloadListedForChrome(liveTabs, listedIds, discardFn, null);
+    const n = await core.unloadListedForChrome(liveTabs, listedIds, discardFn);
     assert.equal(n, 3);
     assert.deepEqual(calls, [101, 102, 103]);
     for (const arg of calls) {

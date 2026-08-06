@@ -29,11 +29,6 @@ async function loadTabsFromBackground() {
   };
 }
 
-/** @deprecated name kept for call sites; always uses background sync. */
-async function loadTabsDirectly() {
-  return loadTabsFromBackground();
-}
-
 document.addEventListener("DOMContentLoaded", function () {
   const tableBody = document.getElementById("table-body");
   const searchInput = document.getElementById("search-input");
@@ -225,7 +220,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const listedIds = filteredTabEntries.map(([, tab]) => tab.id);
     const tabs = await browser.tabs.query({});
     // selectUnloadListedIds excludes every active tab (all windows)
-    const ids = Core.selectUnloadListedIds(tabs, listedIds, null);
+    const ids = Core.selectUnloadListedIds(tabs, listedIds);
     return { count: ids.length, ids };
   }
 
@@ -346,7 +341,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function reloadTabListFromBrowser() {
-    const direct = await loadTabsDirectly();
+    const direct = await loadTabsFromBackground();
     tabInfoList = direct.tabInfoList || {};
     lastMeta = direct.meta || {};
     loadError = null;
