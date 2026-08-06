@@ -138,6 +138,123 @@ describe("mergeLiveTabsWithHistory", () => {
   });
 });
 
+describe("session-lifetime restore (SW restarts)", () => {
+  const now = 1_000_000;
+
+  it("getHistoryMergeMode is restore only before session flag is set", () => {
+    assert.equal(core.getHistoryMergeMode(false), "restore");
+    assert.equal(core.getHistoryMergeMode(true), "live");
+  });
+
+  it("worker restarting twice in the same session does not re-run URL restoration", () => {
+    // storage.session survives SW restarts; in-memory does not.
+    const sessionState = { restoreCompleted: false };
+    const preRestoreStored = {
+      "1": {
+        url: "https://dup.com",
+        firstOpenedTs: 10,
+        firstOpened: "old-first",
+        lastOpenedTs: 20,
+        lastOpened: "old-last",
+      },
+    };
+
+    // --- SW lifetime 1: browser just started ---
+    const live1 = [
+      { id: 10, windowId: 1, title: "Restored", url: "https://dup.com", lastAccessed: 100 },
+    ];
+    const first = core.runSessionAwareSync(live1, preRestoreStored, sessionState, {
+      nowMs: now,
+    });
+    assert.equal(first.mode, "restore");
+    assert.equal(sessionState.restoreCompleted, true);
+    assert.equal(first.list["10"].firstOpenedTs, 10);
+
+    // --- SW lifetime 2: idle kill; session flag still true; memory empty ---
+    // User opens a second tab with the same URL (genuine duplicate).
+    const live2 = [
+      { id: 10, windowId: 1, title: "Restored", url: "https://dup.com", lastAccessed: 100 },
+      { id: 11, windowId: 1, title: "New dup", url: "https://dup.com", lastAccessed: 500 },
+    ];
+    const second = core.runSessionAwareSync(live2, first.list, sessionState, {
+      nowMs: now + 1,
+    });
+    assert.equal(second.mode, "live");
+    assert.equal(second.list["10"].firstOpenedTs, 10);
+    // New tab must not inherit restored history via URL match
+    assert.notEqual(second.list["11"].firstOpenedTs, 10);
+    assert.equal(second.list["11"].lastOpenedTs, 500);
+  });
+
+  it("popup-facing sync returns fully remapped records after startup", () => {
+    const sessionState = { restoreCompleted: false };
+    const preRestoreStored = {
+      "1": {
+        url: "https://a.com",
+        firstOpenedTs: 42,
+        firstOpened: "session-first",
+        lastOpenedTs: 99,
+        lastOpened: "session-last",
+      },
+      "2": {
+        url: "https://b.com",
+        firstOpenedTs: 7,
+        firstOpened: "b-first",
+        lastOpenedTs: 8,
+        lastOpened: "b-last",
+      },
+    };
+    const live = [
+      { id: 100, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 10 },
+      { id: 101, windowId: 1, title: "B", url: "https://b.com", lastAccessed: 20 },
+    ];
+
+    // What the background returns after syncAndGetTabInfo
+    const synced = core.runSessionAwareSync(live, preRestoreStored, sessionState, {
+      nowMs: now,
+    });
+    assert.equal(synced.mode, "restore");
+    assert.equal(synced.list["100"].firstOpenedTs, 42);
+    assert.equal(synced.list["101"].firstOpenedTs, 7);
+
+    // Wrong popup path: live-merge against pre-restore storage loses history
+    const premature = core.mergeLiveTabsWithHistory(live, preRestoreStored, {
+      mode: "live",
+      nowMs: now,
+    });
+    assert.notEqual(premature["100"].firstOpenedTs, 42);
+
+    // Correct popup path: use only background-returned records
+    assert.equal(synced.list["100"].firstOpenedTs, 42);
+    assert.equal(synced.list["101"].firstOpenedTs, 7);
+  });
+
+  it("genuinely new duplicate after startup does not inherit another tab’s history", () => {
+    const sessionState = { restoreCompleted: true }; // already past startup
+    const stored = {
+      "5": {
+        id: 5,
+        url: "https://dup.com",
+        firstOpenedTs: 1,
+        firstOpened: "keeper",
+        lastOpenedTs: 2,
+        lastOpened: "keeper-last",
+      },
+    };
+    const live = [
+      { id: 5, windowId: 1, title: "Keeper", url: "https://dup.com", lastAccessed: 2 },
+      { id: 6, windowId: 1, title: "New", url: "https://dup.com", lastAccessed: 900 },
+    ];
+    const result = core.runSessionAwareSync(live, stored, sessionState, {
+      nowMs: now,
+    });
+    assert.equal(result.mode, "live");
+    assert.equal(result.list["5"].firstOpenedTs, 1);
+    assert.notEqual(result.list["6"].firstOpenedTs, 1);
+    assert.equal(result.list["6"].lastOpenedTs, 900);
+  });
+});
+
 describe("selectUnloadListedIds", () => {
   it("never unloads any active tab across windows", () => {
     const tabs = [

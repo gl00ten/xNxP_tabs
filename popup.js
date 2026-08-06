@@ -2,31 +2,36 @@
 const Core = globalThis.xNxPCore;
 
 /**
- * Load open tabs for the popup UI.
- * Reads history from storage but never writes tabInfoList (background only).
- * Live mode: match history by tab id only — never steal URL history between
- * two currently open tabs.
+ * Load open tabs for the popup UI via the background script.
+ * Background waits for init, runs session-aware restore if needed, syncs,
+ * saves, and returns records. Popup never merges raw storage itself (avoids
+ * showing pre-restore IDs after a browser restart).
  */
-async function loadTabsDirectly() {
+async function loadTabsFromBackground() {
   const started = Date.now();
-  const tabs = await browser.tabs.query({});
-  const stored = await browser.storage.local.get("tabInfoList");
-  const old =
-    stored.tabInfoList && typeof stored.tabInfoList === "object"
-      ? stored.tabInfoList
-      : {};
+  const response = await browser.runtime.sendMessage({
+    type: "syncAndGetTabInfo",
+  });
 
-  const list = Core.mergeLiveTabsWithHistory(tabs, old, { mode: "live" });
+  if (!response || !response.ok || !response.tabInfoList) {
+    const errMsg =
+      (response && response.error) ||
+      "Background did not return synchronized tab history";
+    throw new Error(errMsg);
+  }
 
   return {
-    tabInfoList: list,
-    meta: {
-      openTabs: tabs.length,
-      tracked: Object.keys(list).length,
+    tabInfoList: response.tabInfoList,
+    meta: Object.assign({}, response.meta || {}, {
       ms: Date.now() - started,
-      source: "popup-direct",
-    },
+      source: (response.meta && response.meta.source) || "background-sync",
+    }),
   };
+}
+
+/** @deprecated name kept for call sites; always uses background sync. */
+async function loadTabsDirectly() {
+  return loadTabsFromBackground();
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -784,9 +789,8 @@ document.addEventListener("DOMContentLoaded", function () {
       personalBest = bestResult.personalBest || 0;
       updatePersonalBestDisplay();
 
-      // Primary path: query tabs in the popup (works even if background is stuck
-      // after an extension reload — no Firefox restart needed).
-      const direct = await loadTabsDirectly();
+      // Background owns restore + sync; popup only displays returned records.
+      const direct = await loadTabsFromBackground();
       tabInfoList = direct.tabInfoList || {};
       loadError = null;
       lastMeta = direct.meta || {};
