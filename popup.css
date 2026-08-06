@@ -1012,27 +1012,30 @@ th.col-date {
 /* ---------- 2026 interface polish ---------- */
 
 :root {
-  --blue: #2475e8;
-  --blue-2: #1559b7;
-  --blue-soft: #edf5ff;
-  --orange: #f59a23;
-  --orange-2: #d96f08;
-  --orange-soft: #fff5e8;
+  --blue: #148dff;
+  --blue-2: #086edf;
+  --blue-soft: #e7f4ff;
+  --orange: #ff9f1c;
+  --orange-2: #f47d00;
+  --orange-soft: #fff3df;
   --text: #17263a;
   --muted: #5e7188;
   --faint: #8494a8;
   --border: #dce4ee;
   --border-warm: #f0ddc3;
-  --row: #ffffff;
-  --row-alt: #f8fafc;
-  --grad-header: linear-gradient(118deg, #1765cf 0%, #2589e8 58%, #f4a137 100%);
-  --grad-thead: #edf3f9;
+  --row: #fffefe;
+  --row-alt: #f4f9ff;
+  --grad-header: linear-gradient(110deg, #086de4 0%, #1596ff 30%, #38caff 50%, #ffbd4a 76%, #ff8508 100%);
+  --grad-thead: linear-gradient(90deg, #0875e7 0%, #2da8ff 42%, #ffc45e 74%, #ff8b0b 100%);
   --grad-switch: linear-gradient(180deg, #3187ee 0%, #1c68cd 100%);
   --grad-close: linear-gradient(180deg, #8a78df 0%, #6d58c7 100%);
 }
 
 body {
-  background: #f4f7fb;
+  background:
+    radial-gradient(circle at 5% 0%, rgba(255, 176, 46, 0.34), transparent 32%),
+    radial-gradient(circle at 95% 5%, rgba(42, 171, 255, 0.3), transparent 34%),
+    linear-gradient(145deg, #e9f5ff 0%, #f7fbff 45%, #fff1dc 100%);
   min-height: 220px;
 }
 
@@ -1040,7 +1043,8 @@ body {
   gap: 10px;
   padding: 10px 12px;
   border-bottom: 0;
-  box-shadow: 0 2px 12px rgba(20, 58, 102, 0.18);
+  border-bottom: 3px solid #ffbd4a;
+  box-shadow: 0 3px 14px rgba(16, 75, 145, 0.24), inset 0 -1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .brand {
@@ -1052,12 +1056,15 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  box-shadow: 0 3px 8px rgba(8, 43, 91, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.76);
+  box-shadow: 0 3px 9px rgba(8, 43, 91, 0.3), 0 0 0 2px rgba(255, 174, 48, 0.25);
+  transform: rotate(-2deg);
 }
 
 .brand-text {
   font-size: 8px;
   letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 35, 80, 0.45);
 }
 
 .search-wrap {
@@ -1095,10 +1102,10 @@ body {
   width: 100%;
   padding: 10px 34px 10px 34px;
   border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 10px;
+  border-radius: 14px;
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 2px 8px rgba(9, 47, 94, 0.15);
+  background: linear-gradient(180deg, #fff 0%, #fffaf2 100%);
+  box-shadow: 0 3px 9px rgba(9, 47, 94, 0.18), inset 0 1px 0 #fff;
   transition: box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
@@ -1111,8 +1118,8 @@ body {
   min-width: 52px;
   padding: 5px 9px;
   border: 1px solid rgba(255, 255, 255, 0.42);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 7px rgba(9, 47, 94, 0.14);
+  background: linear-gradient(145deg, #fff 0%, #fff1da 100%);
+  box-shadow: 0 2px 8px rgba(9, 47, 94, 0.17), inset 0 1px 0 #fff;
 }
 
 .tab-count .count {
@@ -1123,9 +1130,9 @@ body {
   height: 34px;
   padding: 0 9px;
   border: 1px solid rgba(255, 255, 255, 0.48);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 7px rgba(9, 47, 94, 0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff 0%, #fff3df 100%);
+  box-shadow: 0 2px 7px rgba(9, 47, 94, 0.15), inset 0 1px 0 #fff;
 }
 
 .audio-filter:hover {
@@ -1135,7 +1142,7 @@ body {
 .menu-btn {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 1px;
@@ -1147,25 +1154,25 @@ body {
 
 thead {
   background: var(--grad-thead);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid #ffb43c;
 }
 
 th {
   height: 28px;
-  color: #50657d;
-  text-shadow: none;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 45, 100, 0.7);
   text-transform: uppercase;
   letter-spacing: 0.045em;
 }
 
 th.col-date {
-  color: #50657d;
-  text-shadow: none;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 45, 100, 0.7);
 }
 
 th[data-sort]:hover {
-  color: var(--blue-2);
-  background: #e4eef9;
+  color: #fff9d9;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 th[data-sort]:focus-visible {
@@ -1216,9 +1223,9 @@ tbody tr:hover td {
 .action-button {
   min-width: 45px;
   padding: 5px 7px;
-  border-radius: 7px;
+  border-radius: 9px;
   font-size: 10px;
-  box-shadow: none;
+  box-shadow: 0 2px 5px rgba(10, 80, 180, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
   transition: transform 0.14s ease, box-shadow 0.14s ease;
 }
 
