@@ -128,14 +128,15 @@
       </label>
       <button type="button" id="debug-copy-btn" class="debug-copy-btn">Copy logs</button>
       <button type="button" id="debug-hide-btn" class="debug-copy-btn" title="Hide this panel">Hide</button>
-      <label class="debug-open-count" title="popupOpenCount — speech tips on opens 2, 6, 14">
+      <label class="debug-field" title="Mascot tips appear on popup opens 2, 6, and 14">
         <span>Opens</span>
-        <strong id="debug-open-count">0</strong>
         <input type="number" id="debug-open-count-input" min="0" step="1" />
         <button type="button" id="debug-open-count-set" class="debug-copy-btn">Set</button>
-        <button type="button" id="debug-tip-2" class="debug-copy-btn" title="Set count to 2 and show tip">Tip@2</button>
-        <button type="button" id="debug-tip-6" class="debug-copy-btn" title="Set count to 6 and show tip">Tip@6</button>
-        <button type="button" id="debug-tip-14" class="debug-copy-btn" title="Set count to 14 and show tip">Tip@14</button>
+      </label>
+      <label class="debug-field" title="Highest open-tab count recorded by the extension">
+        <span>Best</span>
+        <input type="number" id="debug-personal-best-input" min="0" step="1" />
+        <button type="button" id="debug-personal-best-set" class="debug-copy-btn">Set</button>
       </label>
       <span id="debug-status" class="debug-status"></span>
     </div>

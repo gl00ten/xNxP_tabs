@@ -424,14 +424,24 @@ describe("analyzeDuplicates", () => {
     assert.ok(result.toCloseIds.includes(3));
   });
 
-  it("never closes active tabs even if older", () => {
+  it("keeps the active tab in the protected window even if older", () => {
     const tabs = [
-      { id: 1, url: "https://dup.com", active: true, pinned: false, lastAccessed: 100 },
-      { id: 2, url: "https://dup.com", active: false, pinned: false, lastAccessed: 500 },
-      { id: 3, url: "https://dup.com", active: false, pinned: false, lastAccessed: 200 },
+      { id: 1, windowId: 1, url: "https://dup.com", active: true, pinned: false, lastAccessed: 100 },
+      { id: 2, windowId: 1, url: "https://dup.com", active: false, pinned: false, lastAccessed: 500 },
+      { id: 3, windowId: 1, url: "https://dup.com", active: false, pinned: false, lastAccessed: 200 },
     ];
-    const result = core.analyzeDuplicates(tabs, {});
+    const result = core.analyzeDuplicates(tabs, {}, 1);
     assert.deepEqual(result.toCloseIds.sort((a, b) => a - b), [3]);
+  });
+
+  it("closes an active duplicate in another window", () => {
+    const tabs = [
+      { id: 1, windowId: 1, url: "https://dup.com", active: true, pinned: false, lastAccessed: 500 },
+      { id: 2, windowId: 2, url: "https://dup.com", active: true, pinned: false, lastAccessed: 100 },
+    ];
+    const result = core.analyzeDuplicates(tabs, {}, 1);
+    assert.equal(result.groups, 1);
+    assert.deepEqual(result.toCloseIds, [2]);
   });
 
   it("skips pinned tabs", () => {
@@ -513,19 +523,24 @@ describe("getAgeColors", () => {
 
 describe("buildWindowUnloadRows", () => {
   it("sorts by unloadable descending and excludes active tabs", () => {
-    const windows = [{ id: 1 }, { id: 2 }];
-    const tabsByWindow = {
-      1: [
-        { id: 1, active: true, url: "https://a.com", pinned: false, discarded: false },
-        { id: 2, active: false, url: "https://b.com", pinned: false, discarded: false },
-      ],
-      2: [
-        { id: 3, active: true, url: "https://c.com", pinned: false, discarded: false },
-        { id: 4, active: false, url: "https://d.com", pinned: false, discarded: false },
-        { id: 5, active: false, url: "https://e.com", pinned: false, discarded: false },
-      ],
-    };
-    const rows = core.buildWindowUnloadRows(windows, tabsByWindow, 1);
+    const windows = [
+      {
+        id: 1,
+        tabs: [
+          { id: 1, active: true, url: "https://a.com", pinned: false, discarded: false },
+          { id: 2, active: false, url: "https://b.com", pinned: false, discarded: false },
+        ],
+      },
+      {
+        id: 2,
+        tabs: [
+          { id: 3, active: true, url: "https://c.com", pinned: false, discarded: false },
+          { id: 4, active: false, url: "https://d.com", pinned: false, discarded: false },
+          { id: 5, active: false, url: "https://e.com", pinned: false, discarded: false },
+        ],
+      },
+    ];
+    const rows = core.buildWindowUnloadRows(windows, 1);
     assert.equal(rows[0].win.id, 2);
     assert.equal(rows[0].unloadable, 2);
     assert.equal(rows[1].unloadable, 1);
@@ -535,8 +550,9 @@ describe("buildWindowUnloadRows", () => {
 describe("Chrome discard calls (tabs.discard)", () => {
   it("calls discard once per id, never with an array, skips active tabs", async () => {
     const calls = [];
-    const discardFn = async (arg) => {
+    const discardFn = (arg) => {
       calls.push(arg);
+      return Promise.resolve();
     };
 
     const liveTabs = [
@@ -572,9 +588,7 @@ describe("failed tab closing (tabs.remove)", () => {
         lastOpenedTs: 2,
       },
     };
-    const removeFn = async () => {
-      throw new Error("Cannot close tab");
-    };
+    const removeFn = () => Promise.reject(new Error("Cannot close tab"));
 
     const result = await core.tryCloseTabRecord(tabInfoList, "42", removeFn);
     assert.equal(result.ok, false);
@@ -596,8 +610,9 @@ describe("failed tab closing (tabs.remove)", () => {
         lastOpenedTs: 2,
       },
     };
-    const removeFn = async (id) => {
+    const removeFn = (id) => {
       assert.equal(id, 7);
+      return Promise.resolve();
     };
 
     const result = await core.tryCloseTabRecord(tabInfoList, "7", removeFn);
