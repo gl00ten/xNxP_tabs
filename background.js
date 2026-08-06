@@ -52,10 +52,6 @@ function sanitizeDebugData(data) {
   }
 }
 
-function generateTabKey(tabId) {
-  return String(tabId);
-}
-
 function backfillTimestamps(list) {
   for (const key in list) {
     const r = list[key];
@@ -176,7 +172,7 @@ async function updateTabInfo(tabId, changeInfo, tab) {
 
   if (!shouldUpdate) return;
 
-  const tabKey = generateTabKey(tabId);
+  const tabKey = String(tabId);
   // Only exact tab id — never pull history from another open tab by URL
   const existingTabInfo = tabInfoList[tabKey] || null;
 
@@ -199,7 +195,7 @@ async function onTabActivated(activeInfo) {
 
 async function onTabRemoved(tabId /*, removeInfo */) {
   await ensureReady();
-  const tabKey = generateTabKey(tabId);
+  const tabKey = String(tabId);
 
   if (tabInfoList[tabKey]) {
     delete tabInfoList[tabKey];
@@ -209,7 +205,7 @@ async function onTabRemoved(tabId /*, removeInfo */) {
 
 async function onTabCreated(tab) {
   await ensureReady();
-  const tabKey = generateTabKey(tab.id);
+  const tabKey = String(tab.id);
 
   if (tabInfoList[tabKey]) {
     return;
