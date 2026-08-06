@@ -20,12 +20,16 @@
           >×</button>
         </div>
       </div>
-      <input
-        id="search-input"
-        type="search"
-        placeholder="Search tabs..."
-        autocomplete="off"
-      />
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true"></span>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="Find a tab by title or URL"
+          autocomplete="off"
+          aria-label="Find a tab by title or URL"
+        />
+      </div>
       <div class="tab-count">
         <div class="current">
           <span class="count" id="visible-tab-count">0</span>
@@ -50,7 +54,7 @@
           aria-label="Actions menu"
           aria-haspopup="true"
           aria-expanded="false"
-        >☰</button>
+        ><span aria-hidden="true">•••</span></button>
         <div id="actions-menu" class="actions-menu" hidden role="menu">
           <button type="button" class="actions-menu-item" data-action="unload-listed" role="menuitem">
             <span class="actions-menu-icon" aria-hidden="true">💤</span>
