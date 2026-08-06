@@ -531,3 +531,76 @@ describe("buildWindowUnloadRows", () => {
     assert.equal(rows[1].unloadable, 1);
   });
 });
+
+describe("Chrome discard calls (tabs.discard)", () => {
+  it("calls discard once per id, never with an array, skips active tabs", async () => {
+    const calls = [];
+    const discardFn = async (arg) => {
+      calls.push(arg);
+    };
+
+    const liveTabs = [
+      { id: 100, url: "https://active.com", active: true, pinned: false, discarded: false },
+      { id: 101, url: "https://a.com", active: false, pinned: false, discarded: false },
+      { id: 102, url: "https://b.com", active: false, pinned: false, discarded: false },
+      { id: 103, url: "https://c.com", active: false, pinned: false, discarded: false },
+    ];
+    const listedIds = [100, 101, 102, 103];
+
+    const n = await core.unloadListedForChrome(liveTabs, listedIds, discardFn, null);
+    assert.equal(n, 3);
+    assert.deepEqual(calls, [101, 102, 103]);
+    for (const arg of calls) {
+      assert.equal(Array.isArray(arg), false);
+      assert.equal(typeof arg, "number");
+    }
+    assert.ok(!calls.includes(100));
+    assert.ok(!calls.some((a) => Array.isArray(a)));
+  });
+});
+
+describe("failed tab closing (tabs.remove)", () => {
+  it("keeps the record when remove rejects (no unhandled rejection)", async () => {
+    const tabInfoList = {
+      "42": {
+        id: 42,
+        title: "Stay",
+        url: "https://stay.com",
+        firstOpenedTs: 1,
+        lastOpenedTs: 2,
+      },
+    };
+    const removeFn = async () => {
+      throw new Error("Cannot close tab");
+    };
+
+    const result = await core.tryCloseTabRecord(tabInfoList, "42", removeFn);
+    assert.equal(result.ok, false);
+    assert.equal(result.error.message, "Cannot close tab");
+    // Still in popup state / stored record not deleted
+    assert.ok(tabInfoList["42"]);
+    assert.equal(tabInfoList["42"].id, 42);
+    // Visible row would still exist while key is present
+    assert.equal(Object.keys(tabInfoList).length, 1);
+  });
+
+  it("removes the record only after remove succeeds", async () => {
+    const tabInfoList = {
+      "7": {
+        id: 7,
+        title: "Go",
+        url: "https://go.com",
+        firstOpenedTs: 1,
+        lastOpenedTs: 2,
+      },
+    };
+    const removeFn = async (id) => {
+      assert.equal(id, 7);
+    };
+
+    const result = await core.tryCloseTabRecord(tabInfoList, "7", removeFn);
+    assert.equal(result.ok, true);
+    assert.equal(tabInfoList["7"], undefined);
+    assert.equal(Object.keys(tabInfoList).length, 0);
+  });
+});

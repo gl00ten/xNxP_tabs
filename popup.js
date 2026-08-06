@@ -211,43 +211,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function discardInChunks(tabIds, chunkSize = 80) {
-    if (!tabIds.length) return 0;
-    let discarded = 0;
     const oneByOne = Core.shouldDiscardOneByOne(
       typeof navigator !== "undefined" ? navigator.userAgent : ""
     );
-
-    if (oneByOne) {
-      // Chrome: tabs.discard accepts a single tabId only
-      for (const id of tabIds) {
-        try {
-          await browser.tabs.discard(id);
-          discarded += 1;
-        } catch (_) {
-          // skip (e.g. already gone)
-        }
-      }
-      return discarded;
-    }
-
-    // Firefox: array batching is supported
-    for (let i = 0; i < tabIds.length; i += chunkSize) {
-      const chunk = tabIds.slice(i, i + chunkSize);
-      try {
-        await browser.tabs.discard(chunk);
-        discarded += chunk.length;
-      } catch (err) {
-        for (const id of chunk) {
-          try {
-            await browser.tabs.discard(id);
-            discarded += 1;
-          } catch (_) {
-            // skip
-          }
-        }
-      }
-    }
-    return discarded;
+    return Core.discardTabIds(tabIds, (arg) => browser.tabs.discard(arg), {
+      oneByOne: oneByOne,
+      chunkSize: chunkSize,
+    });
   }
 
   /** Unload tabs currently shown in the table (search/filters). Empty search = all. */
@@ -960,20 +930,23 @@ document.addEventListener("DOMContentLoaded", function () {
     closeButton.classList.add("action-button");
     closeButton.onclick = async (e) => {
       e.stopPropagation();
-      try {
-        await browser.tabs.remove(tabInfo.id);
-        // Only update UI after the browser actually closed the tab
-        delete tabInfoList[tabKey];
+      const result = await Core.tryCloseTabRecord(
+        tabInfoList,
+        tabKey,
+        (id) => browser.tabs.remove(id)
+      );
+      if (result.ok) {
         applyFilters();
         renderTable();
-      } catch (err) {
-        console.error("Failed to close tab:", err);
-        setMemBarVisible(true);
-        if (memStatsEl) {
-          memStatsEl.textContent =
-            "Could not close tab: " +
-            (err && err.message ? err.message : String(err));
-        }
+        return;
+      }
+      const err = result.error;
+      console.error("Failed to close tab:", err);
+      setMemBarVisible(true);
+      if (memStatsEl) {
+        memStatsEl.textContent =
+          "Could not close tab: " +
+          (err && err.message ? err.message : String(err));
       }
     };
     actionsCell.appendChild(closeButton);
