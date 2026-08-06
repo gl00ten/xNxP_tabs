@@ -989,8 +989,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function switchToTab(tabInfo) {
     try {
-      await browser.tabs.update(tabInfo.id, { active: true });
-      await browser.windows.update(tabInfo.windowId, { focused: true });
+      // Re-fetch so windowId is correct after the tab was moved across windows
+      const tab = await browser.tabs.get(tabInfo.id);
+      await browser.tabs.update(tab.id, { active: true });
+      await browser.windows.update(tab.windowId, { focused: true });
       globalThis.close();
     } catch (err) {
       console.error("Failed to switch to tab:", err);
