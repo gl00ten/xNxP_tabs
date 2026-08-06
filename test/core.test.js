@@ -136,6 +136,124 @@ describe("mergeLiveTabsWithHistory", () => {
     assert.equal(merged["2"].lastOpenedTs, 222);
     assert.notEqual(merged["1"].lastOpenedTs, merged["2"].lastOpenedTs);
   });
+
+  it("restore: reused tab id with a different URL does not inherit history", () => {
+    // Previous session: id 5 was Reddit. New session: id 5 is GitHub.
+    const stored = {
+      "5": {
+        id: 5,
+        url: "https://reddit.com",
+        firstOpenedTs: 111,
+        firstOpened: "reddit-first",
+        lastOpenedTs: 222,
+        lastOpened: "reddit-last",
+      },
+    };
+    const live = [
+      {
+        id: 5,
+        windowId: 1,
+        title: "GitHub",
+        url: "https://github.com",
+        lastAccessed: 999,
+      },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    assert.notEqual(merged["5"].firstOpenedTs, 111);
+    assert.equal(merged["5"].lastOpenedTs, 999);
+    assert.equal(merged["5"].url, "https://github.com");
+  });
+
+  it("restore: exact id and non-empty URL both matching keeps history", () => {
+    const stored = {
+      "5": {
+        id: 5,
+        url: "https://github.com",
+        firstOpenedTs: 50,
+        firstOpened: "gh-first",
+        lastOpenedTs: 60,
+        lastOpened: "gh-last",
+      },
+    };
+    const live = [
+      {
+        id: 5,
+        windowId: 1,
+        title: "GitHub",
+        url: "https://github.com",
+        lastAccessed: 70,
+      },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    assert.equal(merged["5"].firstOpenedTs, 50);
+    assert.equal(merged["5"].firstOpened, "gh-first");
+  });
+
+  it("restore: empty URLs are never matched to each other", () => {
+    const stored = {
+      "1": {
+        url: "",
+        firstOpenedTs: 10,
+        firstOpened: "blank-old",
+        lastOpenedTs: 11,
+        lastOpened: "blank-old-last",
+      },
+      "2": {
+        url: "",
+        firstOpenedTs: 20,
+        firstOpened: "blank-old-2",
+        lastOpenedTs: 21,
+        lastOpened: "blank-old-2-last",
+      },
+    };
+    const live = [
+      { id: 10, windowId: 1, title: "A", url: "", lastAccessed: 100 },
+      { id: 11, windowId: 1, title: "B", url: "", lastAccessed: 200 },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    // Fresh timestamps from lastAccessed — not stolen from empty-URL pool
+    assert.equal(merged["10"].lastOpenedTs, 100);
+    assert.equal(merged["11"].lastOpenedTs, 200);
+    assert.notEqual(merged["10"].firstOpenedTs, 10);
+    assert.notEqual(merged["11"].firstOpenedTs, 20);
+  });
+
+  it("live mode still trusts tab id when URL has navigated", () => {
+    const stored = {
+      "5": {
+        id: 5,
+        url: "https://old.com",
+        firstOpenedTs: 1,
+        firstOpened: "first",
+        lastOpenedTs: 2,
+        lastOpened: "last",
+      },
+    };
+    const live = [
+      {
+        id: 5,
+        windowId: 1,
+        title: "New",
+        url: "https://new.com",
+        lastAccessed: 3,
+      },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "live",
+      nowMs: now,
+    });
+    assert.equal(merged["5"].firstOpenedTs, 1);
+    assert.equal(merged["5"].url, "https://new.com");
+  });
 });
 
 describe("session-lifetime restore (SW restarts)", () => {
