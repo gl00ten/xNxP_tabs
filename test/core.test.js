@@ -547,7 +547,9 @@ describe("Chrome discard calls (tabs.discard)", () => {
     ];
     const listedIds = [100, 101, 102, 103];
 
-    const n = await core.unloadListedForChrome(liveTabs, listedIds, discardFn);
+    // Same composition as the popup: selectUnloadListedIds + discardTabIds one-by-one
+    const ids = core.selectUnloadListedIds(liveTabs, listedIds);
+    const n = await core.discardTabIds(ids, discardFn, { oneByOne: true });
     assert.equal(n, 3);
     assert.deepEqual(calls, [101, 102, 103]);
     for (const arg of calls) {
