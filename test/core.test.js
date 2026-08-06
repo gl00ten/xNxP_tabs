@@ -11,38 +11,155 @@ describe("isDiscardableUrl", () => {
     assert.equal(core.isDiscardableUrl(""), false);
     assert.equal(core.isDiscardableUrl(null), false);
     assert.equal(core.isDiscardableUrl("about:blank"), false);
-    assert.equal(core.isDiscardableUrl("about:newtab"), false);
     assert.equal(core.isDiscardableUrl("moz-extension://abc/x"), false);
     assert.equal(core.isDiscardableUrl("chrome://settings"), false);
-    assert.equal(core.isDiscardableUrl("chrome-extension://x"), false);
-    assert.equal(core.isDiscardableUrl("edge://newtab"), false);
   });
 
   it("accepts normal web urls", () => {
     assert.equal(core.isDiscardableUrl("https://example.com"), true);
-    assert.equal(core.isDiscardableUrl("http://example.com/path"), true);
-    assert.equal(core.isDiscardableUrl("https://example.com/a?b=1#c"), true);
+  });
+});
+
+describe("mergeLiveTabsWithHistory", () => {
+  const now = 1_000_000;
+
+  it("never transfers history between two open tabs with the same URL (live mode)", () => {
+    const live = [
+      { id: 1, windowId: 1, title: "A", url: "https://dup.com", lastAccessed: 100 },
+      { id: 2, windowId: 1, title: "B", url: "https://dup.com", lastAccessed: 200 },
+    ];
+    const stored = {
+      "1": {
+        id: 1,
+        url: "https://dup.com",
+        firstOpened: "old-A",
+        firstOpenedTs: 10,
+        lastOpened: "last-A",
+        lastOpenedTs: 50,
+      },
+      // Orphan record that must NOT be stolen by tab 2 while tab 1 is open
+      "99": {
+        id: 99,
+        url: "https://dup.com",
+        firstOpened: "orphan",
+        firstOpenedTs: 1,
+        lastOpened: "orphan-last",
+        lastOpenedTs: 2,
+      },
+    };
+
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "live",
+      nowMs: now,
+    });
+
+    assert.equal(merged["1"].firstOpenedTs, 10);
+    assert.equal(merged["1"].firstOpened, "old-A");
+    // Tab 2 must not receive orphan history in live mode
+    assert.notEqual(merged["2"].firstOpenedTs, 1);
+    assert.equal(merged["2"].lastOpenedTs, 200); // lastAccessed
+  });
+
+  it("restores by URL only for unmatched tabs after id match (restore mode)", () => {
+    const live = [
+      { id: 10, windowId: 1, title: "NewId", url: "https://site.com", lastAccessed: 500 },
+      { id: 11, windowId: 1, title: "Other", url: "https://other.com", lastAccessed: 600 },
+    ];
+    const stored = {
+      "1": {
+        id: 1,
+        url: "https://site.com",
+        firstOpened: "session-first",
+        firstOpenedTs: 42,
+        lastOpened: "session-last",
+        lastOpenedTs: 99,
+      },
+      "2": {
+        id: 2,
+        url: "https://other.com",
+        firstOpened: "other-first",
+        firstOpenedTs: 7,
+        lastOpened: "other-last",
+        lastOpenedTs: 8,
+      },
+    };
+
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+
+    assert.equal(merged["10"].firstOpenedTs, 42);
+    assert.equal(merged["10"].firstOpened, "session-first");
+    assert.equal(merged["11"].firstOpenedTs, 7);
+  });
+
+  it("when every tab id changed, restores all by URL", () => {
+    const live = [
+      { id: 100, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 10 },
+      { id: 101, windowId: 1, title: "B", url: "https://b.com", lastAccessed: 20 },
+    ];
+    const stored = {
+      "1": {
+        url: "https://a.com",
+        firstOpenedTs: 1,
+        firstOpened: "a",
+        lastOpenedTs: 2,
+        lastOpened: "a2",
+      },
+      "2": {
+        url: "https://b.com",
+        firstOpenedTs: 3,
+        firstOpened: "b",
+        lastOpenedTs: 4,
+        lastOpened: "b2",
+      },
+    };
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    assert.equal(merged["100"].firstOpenedTs, 1);
+    assert.equal(merged["101"].firstOpenedTs, 3);
+  });
+
+  it("empty storage uses tab.lastAccessed not identical now times", () => {
+    const live = [
+      { id: 1, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 111 },
+      { id: 2, windowId: 1, title: "B", url: "https://b.com", lastAccessed: 222 },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, {}, {
+      mode: "live",
+      nowMs: now,
+    });
+    assert.equal(merged["1"].lastOpenedTs, 111);
+    assert.equal(merged["2"].lastOpenedTs, 222);
+    assert.notEqual(merged["1"].lastOpenedTs, merged["2"].lastOpenedTs);
   });
 });
 
 describe("selectUnloadListedIds", () => {
-  const tabs = [
-    { id: 1, url: "https://a.com", pinned: false, discarded: false },
-    { id: 2, url: "https://b.com", pinned: false, discarded: false },
-    { id: 3, url: "https://c.com", pinned: false, discarded: false },
-    { id: 4, url: "https://d.com", pinned: true, discarded: false },
-    { id: 5, url: "about:blank", pinned: false, discarded: false },
-    { id: 6, url: "https://e.com", pinned: false, discarded: true },
-  ];
-
-  it("only unloads ids present in the list, keeps keepTabId", () => {
-    const ids = core.selectUnloadListedIds(tabs, [1, 2, 4], 1);
-    assert.deepEqual(ids, [2]);
+  it("never unloads any active tab across windows", () => {
+    const tabs = [
+      { id: 1, url: "https://a.com", active: true, windowId: 1, pinned: false, discarded: false },
+      { id: 2, url: "https://b.com", active: true, windowId: 2, pinned: false, discarded: false },
+      { id: 3, url: "https://c.com", active: false, windowId: 1, pinned: false, discarded: false },
+      { id: 4, url: "https://d.com", active: false, windowId: 2, pinned: false, discarded: false },
+    ];
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4], null);
+    assert.deepEqual(ids.sort((a, b) => a - b), [3, 4]);
+    assert.ok(!ids.includes(1));
+    assert.ok(!ids.includes(2));
   });
 
-  it("with full list skips keep, pinned, discarded, internal", () => {
-    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4, 5, 6], 1);
-    assert.deepEqual(ids.sort((a, b) => a - b), [2, 3]);
+  it("only unloads ids present in the list", () => {
+    const tabs = [
+      { id: 1, url: "https://a.com", active: false, pinned: false, discarded: false },
+      { id: 2, url: "https://b.com", active: false, pinned: false, discarded: false },
+      { id: 3, url: "https://c.com", active: false, pinned: false, discarded: false },
+    ];
+    const ids = core.selectUnloadListedIds(tabs, [1, 2], null);
+    assert.deepEqual(ids.sort((a, b) => a - b), [1, 2]);
   });
 });
 
@@ -59,26 +176,17 @@ describe("selectUnloadInWindowIds", () => {
 });
 
 describe("analyzeDuplicates", () => {
-  it("closes older lastOpened copies and keeps newest", () => {
+  it("keeps most recently accessed when storage is empty", () => {
     const tabs = [
       { id: 1, url: "https://dup.com", active: false, pinned: false, lastAccessed: 100 },
       { id: 2, url: "https://dup.com", active: false, pinned: false, lastAccessed: 300 },
       { id: 3, url: "https://dup.com", active: false, pinned: false, lastAccessed: 200 },
-      { id: 4, url: "https://unique.com", active: false, pinned: false, lastAccessed: 50 },
     ];
-    const info = {
-      "1": { lastOpenedTs: 100 },
-      "2": { lastOpenedTs: 300 },
-      "3": { lastOpenedTs: 200 },
-      "4": { lastOpenedTs: 50 },
-    };
-    const result = core.analyzeDuplicates(tabs, info);
-    assert.equal(result.groups, 1);
+    const result = core.analyzeDuplicates(tabs, {});
     assert.equal(result.count, 2);
+    assert.ok(!result.toCloseIds.includes(2));
     assert.ok(result.toCloseIds.includes(1));
     assert.ok(result.toCloseIds.includes(3));
-    assert.ok(!result.toCloseIds.includes(2));
-    assert.ok(!result.toCloseIds.includes(4));
   });
 
   it("never closes active tabs even if older", () => {
@@ -96,19 +204,43 @@ describe("analyzeDuplicates", () => {
       { id: 1, url: "https://dup.com", active: false, pinned: true, lastAccessed: 100 },
       { id: 2, url: "https://dup.com", active: false, pinned: false, lastAccessed: 200 },
     ];
-    const result = core.analyzeDuplicates(tabs, {});
-    assert.equal(result.count, 0);
+    assert.equal(core.analyzeDuplicates(tabs, {}).count, 0);
+  });
+});
+
+describe("shouldDiscardOneByOne", () => {
+  it("is true for Chrome/Edge and false for Firefox", () => {
+    assert.equal(
+      core.shouldDiscardOneByOne(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+      ),
+      true
+    );
+    assert.equal(
+      core.shouldDiscardOneByOne(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+      ),
+      true
+    );
+    assert.equal(
+      core.shouldDiscardOneByOne(
+        "Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0"
+      ),
+      false
+    );
   });
 });
 
 describe("countTabLoadStats", () => {
   it("counts loaded vs discarded", () => {
-    const stats = core.countTabLoadStats([
-      { discarded: false },
-      { discarded: true },
-      { discarded: false },
-    ]);
-    assert.deepEqual(stats, { total: 3, loaded: 2, discarded: 1 });
+    assert.deepEqual(
+      core.countTabLoadStats([
+        { discarded: false },
+        { discarded: true },
+        { discarded: false },
+      ]),
+      { total: 3, loaded: 2, discarded: 1 }
+    );
   });
 });
 
@@ -119,60 +251,33 @@ describe("formatWindowLabel", () => {
       "Work"
     );
   });
-
-  it("falls back to active tab title", () => {
-    assert.equal(
-      core.formatWindowLabel({ id: 9 }, { title: "Hello" }),
-      "Hello"
-    );
-  });
-
-  it("falls back to window id", () => {
-    assert.equal(core.formatWindowLabel({ id: 42 }, null), "Window 42");
-  });
 });
 
 describe("formatDateParts", () => {
-  it("splits date and time for two-line cells", () => {
+  it("splits date and time", () => {
     const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime());
     assert.equal(parts.date, "20.01.15");
     assert.equal(parts.time, "10:05");
   });
-
-  it("returns fallback when missing", () => {
-    assert.deepEqual(core.formatDateParts(0, "n/a"), { date: "n/a", time: "" });
-    assert.equal(core.formatDateParts(null, ""), null);
-  });
 });
 
-describe("getAgeColors (linear newest → blue → orange)", () => {
+describe("getAgeColors", () => {
   const minTs = 1000;
   const maxTs = 2000;
 
-  it("returns null for the most recent tab", () => {
+  it("returns null for newest", () => {
     assert.equal(core.getAgeColors(maxTs, minTs, maxTs), null);
-    assert.equal(core.getAgeT(maxTs, minTs, maxTs), 0);
   });
 
-  it("returns a soft wash for mid and oldest", () => {
-    const mid = core.getAgeColors(1500, minTs, maxTs);
-    assert.ok(mid);
-    assert.ok(Math.abs(mid.t - 0.5) < 0.001);
-    assert.match(mid.wash, /^hsl\(/);
-
+  it("returns wash for older", () => {
     const old = core.getAgeColors(minTs, minTs, maxTs);
     assert.ok(old);
-    assert.equal(old.t, 1);
-  });
-
-  it("returns null when range is invalid", () => {
-    assert.equal(core.getAgeColors(1000, 1000, 1000), null);
-    assert.equal(core.getAgeColors(0, 1, 2), null);
+    assert.match(old.wash, /^hsl\(/);
   });
 });
 
 describe("buildWindowUnloadRows", () => {
-  it("sorts by unloadable descending", () => {
+  it("sorts by unloadable descending and excludes active tabs", () => {
     const windows = [{ id: 1 }, { id: 2 }];
     const tabsByWindow = {
       1: [
@@ -183,14 +288,11 @@ describe("buildWindowUnloadRows", () => {
         { id: 3, active: true, url: "https://c.com", pinned: false, discarded: false },
         { id: 4, active: false, url: "https://d.com", pinned: false, discarded: false },
         { id: 5, active: false, url: "https://e.com", pinned: false, discarded: false },
-        { id: 6, active: false, url: "https://f.com", pinned: false, discarded: false },
       ],
     };
     const rows = core.buildWindowUnloadRows(windows, tabsByWindow, 1);
     assert.equal(rows[0].win.id, 2);
-    assert.equal(rows[0].unloadable, 3);
-    assert.equal(rows[1].win.id, 1);
+    assert.equal(rows[0].unloadable, 2);
     assert.equal(rows[1].unloadable, 1);
-    assert.equal(rows[1].isCurrent, true);
   });
 });

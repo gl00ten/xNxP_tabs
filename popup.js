@@ -2,86 +2,21 @@
 const Core = globalThis.xNxPCore;
 
 /**
- * Load open tabs from the browser itself (like Tabhunter).
- * Does not depend on the background page being awake.
- * Merges first/last-opened history from storage when available.
+ * Load open tabs for the popup UI.
+ * Reads history from storage but never writes tabInfoList (background only).
+ * Live mode: match history by tab id only — never steal URL history between
+ * two currently open tabs.
  */
 async function loadTabsDirectly() {
   const started = Date.now();
   const tabs = await browser.tabs.query({});
   const stored = await browser.storage.local.get("tabInfoList");
-  const old = stored.tabInfoList && typeof stored.tabInfoList === "object"
-    ? stored.tabInfoList
-    : {};
+  const old =
+    stored.tabInfoList && typeof stored.tabInfoList === "object"
+      ? stored.tabInfoList
+      : {};
 
-  // URL → pool of historical records (for session restore / tab id churn)
-  const oldByUrl = {};
-  for (const key of Object.keys(old)) {
-    const rec = old[key];
-    if (!rec) continue;
-    const url = rec.url || "";
-    if (!oldByUrl[url]) oldByUrl[url] = [];
-    oldByUrl[url].push(rec);
-  }
-
-  const now = Date.now();
-  const nowStr = new Date().toLocaleString();
-  const list = {};
-
-  for (const tab of tabs) {
-    const key = String(tab.id);
-    let prev = old[key] || null;
-
-    if (!prev) {
-      const url = tab.url || "";
-      const pool = oldByUrl[url];
-      if (pool && pool.length > 0) {
-        prev = pool.reduce((best, cur) => {
-          const bestTs = best.firstOpenedTs || Infinity;
-          const curTs = cur.firstOpenedTs || Infinity;
-          return curTs < bestTs ? cur : best;
-        });
-        const idx = pool.indexOf(prev);
-        if (idx > -1) pool.splice(idx, 1);
-      }
-    }
-
-    const firstOpened = prev?.firstOpened || nowStr;
-    const firstOpenedTs = prev?.firstOpenedTs || now;
-    let lastOpened = prev?.lastOpened || "";
-    let lastOpenedTs = prev?.lastOpenedTs || 0;
-    if (!lastOpened && firstOpened) {
-      lastOpened = firstOpened;
-      lastOpenedTs = firstOpenedTs;
-    }
-    if (!lastOpened) {
-      lastOpened = nowStr;
-      lastOpenedTs = now;
-    }
-
-    list[key] = {
-      id: tab.id,
-      windowId: tab.windowId,
-      title: tab.title || "",
-      url: tab.url || "",
-      favIconUrl: tab.favIconUrl || prev?.favIconUrl || "",
-      audible: !!tab.audible,
-      discarded: !!tab.discarded,
-      firstOpened,
-      firstOpenedTs,
-      lastOpened,
-      lastOpenedTs,
-    };
-  }
-
-  // Defer full storage write so first paint isn't competing with a huge write
-  // (tabInfoList can be large with 1k+ tabs).
-  setTimeout(() => {
-    browser.storage.local.set({ tabInfoList: list }).catch(() => {});
-  }, 0);
-
-  // Do NOT send getTabInfo here — that re-runs a full syncActiveTabs in the
-  // background and doubles work on every open.
+  const list = Core.mergeLiveTabsWithHistory(tabs, old, { mode: "live" });
 
   return {
     tabInfoList: list,
@@ -271,14 +206,32 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function discardInChunks(tabIds, chunkSize = 80) {
+    if (!tabIds.length) return 0;
     let discarded = 0;
+    const oneByOne = Core.shouldDiscardOneByOne(
+      typeof navigator !== "undefined" ? navigator.userAgent : ""
+    );
+
+    if (oneByOne) {
+      // Chrome: tabs.discard accepts a single tabId only
+      for (const id of tabIds) {
+        try {
+          await browser.tabs.discard(id);
+          discarded += 1;
+        } catch (_) {
+          // skip (e.g. already gone)
+        }
+      }
+      return discarded;
+    }
+
+    // Firefox: array batching is supported
     for (let i = 0; i < tabIds.length; i += chunkSize) {
       const chunk = tabIds.slice(i, i + chunkSize);
       try {
         await browser.tabs.discard(chunk);
         discarded += chunk.length;
       } catch (err) {
-        // Some tabs cannot be discarded; try one-by-one for the chunk
         for (const id of chunk) {
           try {
             await browser.tabs.discard(id);
@@ -294,15 +247,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   /** Unload tabs currently shown in the table (search/filters). Empty search = all. */
   async function countUnloadListed() {
-    const [current] = await browser.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
     const listedIds = filteredTabEntries.map(([, tab]) => tab.id);
     const tabs = await browser.tabs.query({});
-    const keepId = current ? current.id : null;
-    const ids = Core.selectUnloadListedIds(tabs, listedIds, keepId);
-    return { count: ids.length, ids, keptId: keepId };
+    // selectUnloadListedIds excludes every active tab (all windows)
+    const ids = Core.selectUnloadListedIds(tabs, listedIds, null);
+    return { count: ids.length, ids };
   }
 
   async function unloadListedTabs() {
@@ -408,22 +357,14 @@ document.addEventListener("DOMContentLoaded", function () {
       return { closed: 0 };
     }
 
+    // One-by-one so we only count tabs the browser actually closed
     let closed = 0;
-    const chunkSize = 50;
-    for (let i = 0; i < analysis.toCloseIds.length; i += chunkSize) {
-      const chunk = analysis.toCloseIds.slice(i, i + chunkSize);
+    for (const id of analysis.toCloseIds) {
       try {
-        await browser.tabs.remove(chunk);
-        closed += chunk.length;
-      } catch (err) {
-        for (const id of chunk) {
-          try {
-            await browser.tabs.remove(id);
-            closed += 1;
-          } catch (_) {
-            // skip
-          }
-        }
+        await browser.tabs.remove(id);
+        closed += 1;
+      } catch (_) {
+        // leave open; caller may refresh list
       }
     }
     return { closed };
@@ -1017,14 +958,19 @@ document.addEventListener("DOMContentLoaded", function () {
       e.stopPropagation();
       try {
         await browser.tabs.remove(tabInfo.id);
+        // Only update UI after the browser actually closed the tab
+        delete tabInfoList[tabKey];
+        applyFilters();
+        renderTable();
       } catch (err) {
         console.error("Failed to close tab:", err);
+        setMemBarVisible(true);
+        if (memStatsEl) {
+          memStatsEl.textContent =
+            "Could not close tab: " +
+            (err && err.message ? err.message : String(err));
+        }
       }
-      // Optimistically remove from our local snapshot and re-render immediately.
-      // Background onTabRemoved will handle the real delete + storage (avoids race).
-      delete tabInfoList[tabKey];
-      applyFilters();
-      renderTable();
     };
     actionsCell.appendChild(closeButton);
     row.appendChild(actionsCell);
@@ -1171,7 +1117,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     emptyState.dataset.kind = "empty";
     emptyState.textContent =
-      "No tabs found. If tabs are open, reload this add-on or restart Firefox.";
+      "No tabs found. If tabs are open, reload this add-on or restart the browser.";
   }
 
   function renderTable() {
