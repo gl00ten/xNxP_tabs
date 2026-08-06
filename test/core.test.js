@@ -254,6 +254,111 @@ describe("mergeLiveTabsWithHistory", () => {
     assert.equal(merged["5"].firstOpenedTs, 1);
     assert.equal(merged["5"].url, "https://new.com");
   });
+
+  it("restore: keeps unmatched stored history as pending for progressive restore", () => {
+    const stored = {
+      "1": {
+        url: "https://early.com",
+        firstOpenedTs: 10,
+        firstOpened: "early-first",
+        lastOpenedTs: 11,
+        lastOpened: "early-last",
+      },
+      "2": {
+        url: "https://late.com",
+        firstOpenedTs: 20,
+        firstOpened: "late-first",
+        lastOpenedTs: 21,
+        lastOpened: "late-last",
+      },
+    };
+    // Chrome has only restored one tab so far
+    const livePartial = [
+      {
+        id: 100,
+        windowId: 1,
+        title: "Early",
+        url: "https://early.com",
+        lastAccessed: 500,
+      },
+    ];
+    const first = core.mergeLiveTabsWithHistory(livePartial, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    assert.equal(first["100"].firstOpenedTs, 10);
+    assert.equal(core.countPendingRestoreRecords(first), 1);
+    const pendingKeys = Object.keys(first).filter((k) =>
+      core.isPendingRestoreRecord(first[k])
+    );
+    assert.equal(pendingKeys.length, 1);
+    assert.equal(first[pendingKeys[0]].url, "https://late.com");
+    assert.equal(first[pendingKeys[0]].firstOpenedTs, 20);
+    // Popup must not show placeholders
+    assert.equal(
+      Object.keys(core.stripPendingRestoreRecords(first)).length,
+      1
+    );
+
+    // Later the second tab appears — full sync must retain original firstOpenedTs
+    const liveFull = [
+      {
+        id: 100,
+        windowId: 1,
+        title: "Early",
+        url: "https://early.com",
+        lastAccessed: 500,
+      },
+      {
+        id: 101,
+        windowId: 1,
+        title: "Late",
+        url: "https://late.com",
+        lastAccessed: 600,
+      },
+    ];
+    const second = core.mergeLiveTabsWithHistory(liveFull, first, {
+      mode: "restore",
+      nowMs: now + 1,
+    });
+    assert.equal(second["100"].firstOpenedTs, 10);
+    assert.equal(second["101"].firstOpenedTs, 20);
+    assert.equal(core.countPendingRestoreRecords(second), 0);
+  });
+
+  it("restore: pending key does not collide when live reuses stored id for a different URL", () => {
+    const stored = {
+      "5": {
+        id: 5,
+        url: "https://reddit.com",
+        firstOpenedTs: 111,
+        firstOpened: "reddit-first",
+        lastOpenedTs: 222,
+        lastOpened: "reddit-last",
+      },
+    };
+    const live = [
+      {
+        id: 5,
+        windowId: 1,
+        title: "GitHub",
+        url: "https://github.com",
+        lastAccessed: 999,
+      },
+    ];
+    const merged = core.mergeLiveTabsWithHistory(live, stored, {
+      mode: "restore",
+      nowMs: now,
+    });
+    assert.equal(merged["5"].url, "https://github.com");
+    assert.notEqual(merged["5"].firstOpenedTs, 111);
+    assert.equal(core.countPendingRestoreRecords(merged), 1);
+    const pending = Object.values(merged).find((r) =>
+      core.isPendingRestoreRecord(r)
+    );
+    assert.equal(pending.url, "https://reddit.com");
+    assert.equal(pending.firstOpenedTs, 111);
+  });
 });
 
 describe("session-lifetime restore (SW restarts)", () => {
@@ -370,6 +475,116 @@ describe("session-lifetime restore (SW restarts)", () => {
     assert.equal(result.list["5"].firstOpenedTs, 1);
     assert.notEqual(result.list["6"].firstOpenedTs, 1);
     assert.equal(result.list["6"].lastOpenedTs, 900);
+  });
+
+  it("progressive restore does not mark session complete while pending history remains", () => {
+    const sessionState = { restoreCompleted: false };
+    const stored = {
+      "1": {
+        url: "https://a.com",
+        firstOpenedTs: 42,
+        firstOpened: "a-first",
+        lastOpenedTs: 43,
+        lastOpened: "a-last",
+      },
+      "2": {
+        url: "https://b.com",
+        firstOpenedTs: 7,
+        firstOpened: "b-first",
+        lastOpenedTs: 8,
+        lastOpened: "b-last",
+      },
+    };
+    const livePartial = [
+      { id: 100, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 10 },
+    ];
+    const first = core.runSessionAwareSync(livePartial, stored, sessionState, {
+      nowMs: now,
+    });
+    assert.equal(first.mode, "restore");
+    assert.equal(sessionState.restoreCompleted, false);
+    assert.equal(first.pendingRestore, 1);
+    assert.equal(first.list["100"].firstOpenedTs, 42);
+
+    const liveFull = [
+      { id: 100, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 10 },
+      { id: 101, windowId: 1, title: "B", url: "https://b.com", lastAccessed: 20 },
+    ];
+    const second = core.runSessionAwareSync(liveFull, first.list, sessionState, {
+      nowMs: now + 1,
+    });
+    assert.equal(second.mode, "restore");
+    assert.equal(sessionState.restoreCompleted, true);
+    assert.equal(second.pendingRestore, 0);
+    assert.equal(second.list["100"].firstOpenedTs, 42);
+    assert.equal(second.list["101"].firstOpenedTs, 7);
+  });
+
+  it("forceCompleteRestore strips remaining pending and marks session done", () => {
+    const sessionState = { restoreCompleted: false };
+    const stored = {
+      "1": {
+        url: "https://a.com",
+        firstOpenedTs: 1,
+        firstOpened: "a",
+        lastOpenedTs: 2,
+        lastOpened: "a2",
+      },
+      "2": {
+        url: "https://gone.com",
+        firstOpenedTs: 3,
+        firstOpened: "gone",
+        lastOpenedTs: 4,
+        lastOpened: "gone2",
+      },
+    };
+    const live = [
+      { id: 10, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 9 },
+    ];
+    const result = core.runSessionAwareSync(live, stored, sessionState, {
+      nowMs: now,
+      forceCompleteRestore: true,
+    });
+    assert.equal(sessionState.restoreCompleted, true);
+    assert.equal(result.pendingRestore, 0);
+    assert.equal(result.list["10"].firstOpenedTs, 1);
+    assert.equal(core.countPendingRestoreRecords(result.list), 0);
+    assert.ok(!Object.values(result.list).some((r) => r.url === "https://gone.com"));
+  });
+
+  it("claimPendingRestoreForTab binds a late tab to pending history by URL", () => {
+    const list = {
+      "100": {
+        id: 100,
+        url: "https://a.com",
+        firstOpenedTs: 10,
+        firstOpened: "a",
+        lastOpenedTs: 11,
+        lastOpened: "a2",
+      },
+      "2": {
+        id: 2,
+        url: "https://b.com",
+        firstOpenedTs: 20,
+        firstOpened: "b",
+        lastOpenedTs: 21,
+        lastOpened: "b2",
+        pendingRestore: true,
+      },
+    };
+    const tab = {
+      id: 101,
+      windowId: 1,
+      title: "B",
+      url: "https://b.com",
+      lastAccessed: 50,
+    };
+    const claimed = core.claimPendingRestoreForTab(list, tab, { nowMs: now });
+    assert.equal(claimed.claimed, true);
+    assert.equal(claimed.list["101"].firstOpenedTs, 20);
+    assert.equal(claimed.list["101"].url, "https://b.com");
+    assert.equal(core.countPendingRestoreRecords(claimed.list), 0);
+    assert.equal(claimed.list["2"], undefined);
   });
 });
 

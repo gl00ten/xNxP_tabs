@@ -6,6 +6,12 @@ const Core = globalThis.xNxPCore;
 /** storage.session key: URL restore finished for this browser session. */
 const SESSION_RESTORE_KEY = "startupRestoreDone";
 
+/**
+ * How long to keep restore-mode URL matching while Chrome restores tabs
+ * progressively. After this, unmatched history is dropped.
+ */
+const RESTORE_GRACE_MS = 20000;
+
 let tabInfoList = {};
 /** In-memory mirror; storage.session is the source of truth across SW restarts. */
 let sessionRestoreCompleted = false;
@@ -17,8 +23,15 @@ let debugLogs = [];
 let saveTabInfoTimer = null;
 const SAVE_DEBOUNCE_MS = 300;
 
+/** Serialize all tabInfoList mutations (sync / create / update / remove). */
+let mutationChain = Promise.resolve();
+
 /** Single-flight init so messages wait until history is loaded + first sync runs. */
 let readyPromise = null;
+
+/** Wall-clock start of the current restore window (null if not restoring). */
+let restoreWindowStartedAt = null;
+let restoreGraceTimer = null;
 
 function logDebug(message, data = null) {
   if (!debugMode) return;
@@ -95,6 +108,11 @@ async function loadSessionRestoreCompleted() {
 
 async function markSessionRestoreCompleted() {
   sessionRestoreCompleted = true;
+  restoreWindowStartedAt = null;
+  if (restoreGraceTimer) {
+    clearTimeout(restoreGraceTimer);
+    restoreGraceTimer = null;
+  }
   if (hasSessionStorage()) {
     try {
       await browser.storage.session.set({ [SESSION_RESTORE_KEY]: true });
@@ -102,6 +120,21 @@ async function markSessionRestoreCompleted() {
       logDebug("storage.session set failed", err);
     }
   }
+}
+
+/**
+ * Queue mutations so tabs.query merges cannot interleave with create/remove.
+ * Errors are logged; the chain always continues.
+ */
+function enqueueTabMutation(fn) {
+  const run = mutationChain.then(() => fn());
+  mutationChain = run.then(
+    () => undefined,
+    (err) => {
+      logDebug("tab mutation failed", err);
+    }
+  );
+  return run;
 }
 
 async function saveTabInfoListNow() {
@@ -113,6 +146,7 @@ async function saveTabInfoListNow() {
     await browser.storage.local.set({ tabInfoList: tabInfoList });
     logDebug("tabInfoList saved", {
       tracked: Object.keys(tabInfoList).length,
+      pending: Core.countPendingRestoreRecords(tabInfoList),
     });
   } catch (err) {
     logDebug("tabInfoList save failed", err);
@@ -128,11 +162,34 @@ function scheduleSaveTabInfoList() {
   }, SAVE_DEBOUNCE_MS);
 }
 
+function scheduleRestoreGraceComplete() {
+  if (restoreGraceTimer || sessionRestoreCompleted) return;
+  restoreGraceTimer = setTimeout(() => {
+    restoreGraceTimer = null;
+    enqueueTabMutation(async () => {
+      if (sessionRestoreCompleted) return;
+      await doSyncActiveTabs({ flush: true, forceCompleteRestore: true });
+    }).catch((err) => logDebug("restore grace complete failed", err));
+  }, RESTORE_GRACE_MS);
+}
+
+function isLikelyRestoredTab(tab) {
+  const url = (tab && tab.url) || "";
+  return (
+    url !== "" &&
+    !url.startsWith("about:") &&
+    !url.startsWith("chrome://newtab") &&
+    !url.startsWith("edge://newtab") &&
+    !url.startsWith("chrome://new-tab-page")
+  );
+}
+
 /**
  * Sync in-memory history with live tabs.
- * URL restore only when session restore has not completed for this browser session.
+ * URL restore only while session restore has not completed for this browser session.
+ * Must run on the mutation queue (via syncActiveTabs or init).
  */
-async function syncActiveTabs(options) {
+async function doSyncActiveTabs(options) {
   options = options || {};
   const tabs = await browser.tabs.query({});
   const mode = Core.getHistoryMergeMode(sessionRestoreCompleted);
@@ -141,48 +198,114 @@ async function syncActiveTabs(options) {
     openTabs: tabs.length,
     mode: mode,
     sessionRestoreCompleted: sessionRestoreCompleted,
+    forceCompleteRestore: !!options.forceCompleteRestore,
   });
 
   tabInfoList = Core.mergeLiveTabsWithHistory(tabs, tabInfoList, { mode: mode });
 
   if (mode === "restore") {
-    // Persist history first, then mark session so a crash mid-save can re-restore
-    if (options.flush) {
+    if (restoreWindowStartedAt == null) {
+      restoreWindowStartedAt = Date.now();
+      scheduleRestoreGraceComplete();
+    }
+
+    const pending = Core.countPendingRestoreRecords(tabInfoList);
+    const elapsed = Date.now() - restoreWindowStartedAt;
+    const shouldComplete =
+      !!options.forceCompleteRestore ||
+      pending === 0 ||
+      elapsed >= RESTORE_GRACE_MS;
+
+    if (shouldComplete) {
+      tabInfoList = Core.stripPendingRestoreRecords(tabInfoList);
+      if (options.flush) {
+        await saveTabInfoListNow();
+      } else {
+        scheduleSaveTabInfoList();
+      }
+      await markSessionRestoreCompleted();
+      logDebug("session restore completed", {
+        openTabs: tabs.length,
+        tracked: Object.keys(tabInfoList).length,
+        forced: !!options.forceCompleteRestore,
+        pendingBeforeStrip: pending,
+      });
+    } else if (options.flush) {
       await saveTabInfoListNow();
     } else {
       scheduleSaveTabInfoList();
     }
-    await markSessionRestoreCompleted();
   } else if (options.flush) {
     await saveTabInfoListNow();
   } else {
     scheduleSaveTabInfoList();
   }
 
-  return { openTabs: tabs.length, mode: mode };
+  return {
+    openTabs: tabs.length,
+    mode: mode,
+    pendingRestore: Core.countPendingRestoreRecords(tabInfoList),
+  };
 }
 
-async function updateTabInfo(tabId, changeInfo, tab) {
-  if (!tab) return;
+async function syncActiveTabs(options) {
   await ensureReady();
+  return enqueueTabMutation(() => doSyncActiveTabs(options));
+}
+
+async function doUpdateTabInfo(tabId, changeInfo, tab) {
+  if (!tab) return;
 
   const shouldUpdate =
     changeInfo.status === "complete" ||
     changeInfo.title ||
     changeInfo.url ||
-    changeInfo.active === true;
+    changeInfo.active === true ||
+    changeInfo.discarded !== undefined ||
+    changeInfo.audible !== undefined;
 
   if (!shouldUpdate) return;
 
   const tabKey = String(tabId);
+
+  // Progressive restore: URL may arrive after onCreated skipped the tab
+  if (
+    !sessionRestoreCompleted &&
+    (changeInfo.url || changeInfo.status === "complete")
+  ) {
+    const existing = tabInfoList[tabKey];
+    if (!existing || Core.isPendingRestoreRecord(existing)) {
+      const claimed = Core.claimPendingRestoreForTab(tabInfoList, tab);
+      if (claimed.claimed) {
+        tabInfoList = claimed.list;
+        scheduleSaveTabInfoList();
+        if (Core.countPendingRestoreRecords(tabInfoList) === 0) {
+          tabInfoList = Core.stripPendingRestoreRecords(tabInfoList);
+          await saveTabInfoListNow();
+          await markSessionRestoreCompleted();
+        }
+        return;
+      }
+    }
+  }
+
   // Only exact tab id — never pull history from another open tab by URL
-  const existingTabInfo = tabInfoList[tabKey] || null;
+  const existingTabInfo =
+    tabInfoList[tabKey] && !Core.isPendingRestoreRecord(tabInfoList[tabKey])
+      ? tabInfoList[tabKey]
+      : null;
 
   tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, existingTabInfo, {
     forceLastOpened: changeInfo.active === true,
   });
 
   scheduleSaveTabInfoList();
+}
+
+async function updateTabInfo(tabId, changeInfo, tab) {
+  if (!tab) return;
+  await ensureReady();
+  return enqueueTabMutation(() => doUpdateTabInfo(tabId, changeInfo, tab));
 }
 
 async function onTabActivated(activeInfo) {
@@ -195,36 +318,46 @@ async function onTabActivated(activeInfo) {
   }
 }
 
-async function onTabRemoved(tabId /*, removeInfo */) {
-  await ensureReady();
+async function doOnTabRemoved(tabId) {
   const tabKey = String(tabId);
 
-  if (tabInfoList[tabKey]) {
+  if (tabInfoList[tabKey] && !Core.isPendingRestoreRecord(tabInfoList[tabKey])) {
     delete tabInfoList[tabKey];
     scheduleSaveTabInfoList();
   }
 }
 
-async function onTabCreated(tab) {
+async function onTabRemoved(tabId /*, removeInfo */) {
   await ensureReady();
+  return enqueueTabMutation(() => doOnTabRemoved(tabId));
+}
+
+async function doOnTabCreated(tab) {
   const tabKey = String(tab.id);
 
-  if (tabInfoList[tabKey]) {
+  if (tabInfoList[tabKey] && !Core.isPendingRestoreRecord(tabInfoList[tabKey])) {
     return;
   }
 
-  // Restored tabs often arrive with a real URL; do not stamp firstOpened=now.
-  // Leave them for id match or restore-mode sync if still needed this session.
-  const url = tab.url || "";
-  const isLikelyRestoredTab =
-    url !== "" &&
-    !url.startsWith("about:") &&
-    !url.startsWith("chrome://newtab") &&
-    !url.startsWith("edge://newtab") &&
-    !url.startsWith("chrome://new-tab-page");
+  // During restore, claim pending history by URL when possible
+  if (!sessionRestoreCompleted) {
+    const claimed = Core.claimPendingRestoreForTab(tabInfoList, tab);
+    if (claimed.claimed) {
+      tabInfoList = claimed.list;
+      scheduleSaveTabInfoList();
+      if (Core.countPendingRestoreRecords(tabInfoList) === 0) {
+        tabInfoList = Core.stripPendingRestoreRecords(tabInfoList);
+        await saveTabInfoListNow();
+        await markSessionRestoreCompleted();
+      }
+      return;
+    }
 
-  if (isLikelyRestoredTab) {
-    return;
+    // Restored tabs often arrive with a real URL; do not stamp firstOpened=now.
+    // Leave them for a later claim (URL update) or full restore-mode sync.
+    if (isLikelyRestoredTab(tab)) {
+      return;
+    }
   }
 
   tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, null, {
@@ -233,6 +366,11 @@ async function onTabCreated(tab) {
   });
 
   scheduleSaveTabInfoList();
+}
+
+async function onTabCreated(tab) {
+  await ensureReady();
+  return enqueueTabMutation(() => doOnTabCreated(tab));
 }
 
 async function handleSetDebugMode(enabled) {
@@ -258,7 +396,9 @@ async function handleGetDebugReport() {
     report: {
       generatedAt: new Date().toISOString(),
       debugMode: debugMode,
-      trackedTabs: Object.keys(tabInfoList).length,
+      trackedTabs: Object.keys(Core.stripPendingRestoreRecords(tabInfoList))
+        .length,
+      pendingRestore: Core.countPendingRestoreRecords(tabInfoList),
       storageKeys: storageKeys,
       logs: debugLogs.slice(),
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
@@ -274,13 +414,17 @@ async function handleGetDebugReport() {
  */
 async function handleSyncAndGetTabInfo() {
   await ensureReady();
-  const syncResult = await syncActiveTabs({ flush: true });
+  const syncResult = await enqueueTabMutation(() =>
+    doSyncActiveTabs({ flush: true })
+  );
+  const liveList = Core.stripPendingRestoreRecords(tabInfoList);
   return {
     ok: true,
-    tabInfoList: tabInfoList,
+    tabInfoList: liveList,
     meta: {
       openTabs: syncResult.openTabs,
-      tracked: Object.keys(tabInfoList).length,
+      tracked: Object.keys(liveList).length,
+      pendingRestore: syncResult.pendingRestore,
       mode: syncResult.mode,
       sessionRestoreCompleted: sessionRestoreCompleted,
       source: "background-sync",
@@ -317,14 +461,16 @@ async function initializeBackground() {
 
     logDebug("background init start", {
       stored: Object.keys(tabInfoList).length,
+      pending: Core.countPendingRestoreRecords(tabInfoList),
       debugMode: debugMode,
       sessionRestoreCompleted: sessionRestoreCompleted,
     });
 
     // First sync this SW lifetime: restore only if not yet done this browser session
-    await syncActiveTabs({ flush: true });
+    await enqueueTabMutation(() => doSyncActiveTabs({ flush: true }));
     logDebug("background init done", {
       tracked: Object.keys(tabInfoList).length,
+      pending: Core.countPendingRestoreRecords(tabInfoList),
       sessionRestoreCompleted: sessionRestoreCompleted,
     });
   } catch (err) {
