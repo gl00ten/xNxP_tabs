@@ -255,6 +255,38 @@ describe("mergeLiveTabsWithHistory", () => {
     assert.equal(merged["5"].url, "https://new.com");
   });
 
+  it("does not advance lastOpened from browser lastAccessed (passive)", () => {
+    // Active tab in an unfocused window still gets a newer lastAccessed.
+    // History "last opened" must stay put until forceLastOpened (user attention).
+    const previous = {
+      id: 5,
+      url: "https://site.com",
+      firstOpenedTs: 10,
+      firstOpened: "first",
+      lastOpenedTs: 20,
+      lastOpened: "last",
+    };
+    const tab = {
+      id: 5,
+      windowId: 1,
+      title: "Site",
+      url: "https://site.com",
+      lastAccessed: 999999,
+    };
+    const passive = core.buildTabRecordFromLive(tab, previous, {
+      nowMs: now,
+    });
+    assert.equal(passive.lastOpenedTs, 20);
+    assert.equal(passive.firstOpenedTs, 10);
+
+    const attention = core.buildTabRecordFromLive(tab, previous, {
+      nowMs: now,
+      forceLastOpened: true,
+    });
+    assert.equal(attention.lastOpenedTs, now);
+    assert.equal(attention.firstOpenedTs, 10);
+  });
+
   it("restore: keeps unmatched stored history as pending for progressive restore", () => {
     const stored = {
       "1": {

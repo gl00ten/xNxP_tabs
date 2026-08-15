@@ -255,6 +255,17 @@ async function doSyncActiveTabs(options) {
   };
 }
 
+/** True when this window is the one the user is looking at. */
+async function isWindowFocused(windowId) {
+  if (windowId == null) return false;
+  try {
+    const win = await browser.windows.get(windowId);
+    return !!win.focused;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function doUpdateTabInfo(tabId, changeInfo, tab) {
   if (!tab) return;
 
@@ -263,6 +274,7 @@ async function doUpdateTabInfo(tabId, changeInfo, tab) {
     changeInfo.title ||
     changeInfo.url ||
     changeInfo.active === true ||
+    changeInfo.userAttention === true ||
     changeInfo.discarded !== undefined ||
     changeInfo.audible !== undefined;
   if (!shouldUpdate) return;
@@ -281,10 +293,12 @@ async function doUpdateTabInfo(tabId, changeInfo, tab) {
     }
 
     // Real URL, no pending match: new tab opened during the restore window.
+    // firstOpened = now; lastOpened only if this window is focused.
     if (!liveRecord(tabKey)) {
+      const focused = await isWindowFocused(tab.windowId);
       tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, null, {
         forceFirstOpened: true,
-        forceLastOpened: true,
+        forceLastOpened: focused,
       });
       scheduleSaveTabInfoList();
       await maybeFinishRestore(false);
@@ -292,9 +306,17 @@ async function doUpdateTabInfo(tabId, changeInfo, tab) {
     }
   }
 
+  // lastOpened only on real attention: focused window + (activation or focus).
+  let forceLast = false;
+  if (changeInfo.userAttention === true) {
+    forceLast = true;
+  } else if (changeInfo.active === true) {
+    forceLast = await isWindowFocused(tab.windowId);
+  }
+
   const existing = liveRecord(tabKey);
   tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, existing, {
-    forceLastOpened: changeInfo.active === true,
+    forceLastOpened: forceLast,
   });
   scheduleSaveTabInfoList();
 }
@@ -321,9 +343,11 @@ async function doOnTabCreated(tab) {
     }
   }
 
+  // New tab: firstOpened always. lastOpened only if the user is looking.
+  const focused = await isWindowFocused(tab.windowId);
   tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, null, {
     forceFirstOpened: true,
-    forceLastOpened: true,
+    forceLastOpened: focused,
   });
   scheduleSaveTabInfoList();
   if (!sessionRestoreCompleted) await maybeFinishRestore(false);
@@ -346,9 +370,30 @@ async function onTabActivated(activeInfo) {
   try {
     await ensureReady();
     const tab = await browser.tabs.get(activeInfo.tabId);
+    // tabs.onActivated also fires for the active tab in unfocused windows
+    // (new window, background window). Only count focused windows.
     await updateTabInfo(activeInfo.tabId, { active: true }, tab);
   } catch (err) {
     logDebug("onTabActivated failed", err);
+  }
+}
+
+/** User focused a window → its active tab was just looked at. */
+async function onWindowFocusChanged(windowId) {
+  if (
+    windowId === browser.windows.WINDOW_ID_NONE ||
+    windowId == null
+  ) {
+    return;
+  }
+  try {
+    await ensureReady();
+    const tabs = await browser.tabs.query({ active: true, windowId: windowId });
+    const tab = tabs && tabs[0];
+    if (!tab) return;
+    await updateTabInfo(tab.id, { userAttention: true }, tab);
+  } catch (err) {
+    logDebug("onWindowFocusChanged failed", err);
   }
 }
 
@@ -477,6 +522,11 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 browser.tabs.onActivated.addListener((activeInfo) => {
   onTabActivated(activeInfo).catch((err) =>
     logDebug("onTabActivated failed", err)
+  );
+});
+browser.windows.onFocusChanged.addListener((windowId) => {
+  onWindowFocusChanged(windowId).catch((err) =>
+    logDebug("onWindowFocusChanged failed", err)
   );
 });
 browser.tabs.onRemoved.addListener((tabId) => {
