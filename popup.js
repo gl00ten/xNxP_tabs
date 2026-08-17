@@ -809,12 +809,14 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   let searchDebounceTimer;
-  searchInput.addEventListener("input", async () => {
+  searchInput.addEventListener("input", () => {
     highlightIndex = -1;
-    await browser.storage.local.set({ popupSearch: searchInput.value });
-
     clearTimeout(searchDebounceTimer);
+    // Debounce both UI filter and storage (same pause = one write, one redraw).
     searchDebounceTimer = setTimeout(() => {
+      browser.storage.local
+        .set({ popupSearch: searchInput.value })
+        .catch(() => {});
       applyFilters();
       renderTable();
     }, 120);
