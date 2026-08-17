@@ -1,36 +1,37 @@
 // Firefox MV2: polyfill + core loaded via manifest background.scripts
 const Core = globalThis.xNxPCore;
 
-// Session-scoped restore state (cleared when the browser quits).
-const SESSION_RESTORE_DONE_KEY = "startupRestoreDone";
-const SESSION_RESTORE_STARTED_KEY = "restoreStartedAt";
-/** Keep URL-restore open this long for progressive session restore. */
+// Session restore (cleared when the browser quits).
+const SESSION_DONE_KEY = "startupRestoreDone";
+const SESSION_STARTED_KEY = "restoreStartedAt";
 const RESTORE_GRACE_MS = 20000;
+const SAVE_DEBOUNCE_MS = 300;
+const DEBUG_LOG_MAX = 80;
 
 let tabInfoList = {};
 let sessionRestoreCompleted = false;
-/** When restore mode began this browser session (ms), or null. */
-let restoreStartedAt = null;
+let restoreStartedAt = null; // ms when restore window began, or null
 
-const DEBUG_LOG_MAX = 80;
 let debugMode = false;
 let debugLogs = [];
 
-let saveTabInfoTimer = null;
-const SAVE_DEBOUNCE_MS = 300;
-
-/** One chain so merge / create / update / remove never interleave. */
+let saveTimer = null;
 let mutationChain = Promise.resolve();
 let readyPromise = null;
 
-// --- debug ---------------------------------------------------------------
+// --- small helpers -------------------------------------------------------
 
 function logDebug(message, data = null) {
   if (!debugMode) return;
   const entry = {
     t: new Date().toISOString(),
     msg: message,
-    data: data == null ? null : sanitizeDebugData(data),
+    data:
+      data == null
+        ? null
+        : data instanceof Error
+          ? { name: data.name, message: data.message }
+          : data,
   };
   debugLogs.push(entry);
   if (debugLogs.length > DEBUG_LOG_MAX) {
@@ -41,18 +42,7 @@ function logDebug(message, data = null) {
   } catch (_) {
     /* ignore */
   }
-  browser.storage.local.set({ debugLogs }).catch(() => {});
-}
-
-function sanitizeDebugData(data) {
-  try {
-    if (data instanceof Error) {
-      return { name: data.name, message: data.message, stack: data.stack };
-    }
-    return JSON.parse(JSON.stringify(data));
-  } catch (_) {
-    return String(data);
-  }
+  // Debug only — do not spam storage on every log
 }
 
 function backfillTimestamps(list) {
@@ -69,21 +59,14 @@ function backfillTimestamps(list) {
   }
 }
 
-// --- session restore -----------------------------------------------------
-
 function hasSessionStorage() {
-  return !!(
-    typeof browser !== "undefined" &&
-    browser.storage &&
-    browser.storage.session
-  );
+  return !!(browser.storage && browser.storage.session);
 }
 
-/** URL usable as restore identity (not empty / new-tab / about:). */
-function hasRestoreIdentityUrl(url) {
+/** URL good enough to match history during restore (not empty / new-tab). */
+function hasIdentityUrl(url) {
   url = url || "";
-  if (!url) return false;
-  if (url.startsWith("about:")) return false;
+  if (!url || url.startsWith("about:")) return false;
   if (url.startsWith("chrome://newtab")) return false;
   if (url.startsWith("edge://newtab")) return false;
   if (url.startsWith("chrome://new-tab-page")) return false;
@@ -92,53 +75,64 @@ function hasRestoreIdentityUrl(url) {
 
 function liveRecord(tabKey) {
   const rec = tabInfoList[tabKey];
-  if (!rec || Core.isPendingRestoreRecord(rec)) return null;
-  return rec;
+  return rec && !Core.isPendingRestoreRecord(rec) ? rec : null;
 }
+
+/** True if stored history fields we care about actually changed. */
+function historyChanged(before, after) {
+  if (!before) return true;
+  return (
+    before.url !== after.url ||
+    before.title !== after.title ||
+    before.windowId !== after.windowId ||
+    before.discarded !== after.discarded ||
+    before.audible !== after.audible ||
+    before.favIconUrl !== after.favIconUrl ||
+    before.firstOpenedTs !== after.firstOpenedTs ||
+    before.lastOpenedTs !== after.lastOpenedTs
+  );
+}
+
+async function windowFocused(windowId) {
+  if (windowId == null) return false;
+  try {
+    return !!(await browser.windows.get(windowId)).focused;
+  } catch (_) {
+    return false;
+  }
+}
+
+// --- session restore -----------------------------------------------------
 
 async function loadSessionRestoreState() {
   if (!hasSessionStorage()) return;
   try {
     const r = await browser.storage.session.get([
-      SESSION_RESTORE_DONE_KEY,
-      SESSION_RESTORE_STARTED_KEY,
+      SESSION_DONE_KEY,
+      SESSION_STARTED_KEY,
     ]);
-    sessionRestoreCompleted = !!r[SESSION_RESTORE_DONE_KEY];
-    const started = r[SESSION_RESTORE_STARTED_KEY];
+    sessionRestoreCompleted = !!r[SESSION_DONE_KEY];
+    const started = r[SESSION_STARTED_KEY];
     restoreStartedAt =
       typeof started === "number" && isFinite(started) ? started : null;
   } catch (err) {
-    logDebug("storage.session get failed", err);
+    logDebug("session get failed", err);
   }
 }
 
-async function persistRestoreStartedAt(ts) {
+async function setSession(partial) {
   if (!hasSessionStorage()) return;
   try {
-    await browser.storage.session.set({ [SESSION_RESTORE_STARTED_KEY]: ts });
+    await browser.storage.session.set(partial);
   } catch (err) {
-    logDebug("storage.session set startedAt failed", err);
+    logDebug("session set failed", err);
   }
 }
 
-async function markSessionRestoreCompleted() {
-  sessionRestoreCompleted = true;
-  restoreStartedAt = null;
-  if (!hasSessionStorage()) return;
-  try {
-    await browser.storage.session.set({
-      [SESSION_RESTORE_DONE_KEY]: true,
-      [SESSION_RESTORE_STARTED_KEY]: null,
-    });
-  } catch (err) {
-    logDebug("storage.session set done failed", err);
-  }
-}
-
-async function ensureRestoreWindowStarted() {
+async function beginRestoreWindow() {
   if (sessionRestoreCompleted || restoreStartedAt != null) return;
   restoreStartedAt = Date.now();
-  await persistRestoreStartedAt(restoreStartedAt);
+  await setSession({ [SESSION_STARTED_KEY]: restoreStartedAt });
 }
 
 function restoreGraceExpired() {
@@ -148,322 +142,195 @@ function restoreGraceExpired() {
   );
 }
 
-/**
- * End restore mode when pending history is gone, grace elapsed, or forced.
- * Drops leftover pending records and persists.
- */
+/** Finish restore when pending is gone, grace elapsed, or forced. */
 async function maybeFinishRestore(force) {
   if (sessionRestoreCompleted) return false;
   const pending = Core.countPendingRestoreRecords(tabInfoList);
   if (!force && pending > 0 && !restoreGraceExpired()) return false;
 
   tabInfoList = Core.stripPendingRestoreRecords(tabInfoList);
-  await saveTabInfoListNow();
-  await markSessionRestoreCompleted();
-  logDebug("session restore completed", {
-    forced: !!force,
-    pendingBefore: pending,
+  await saveNow();
+  sessionRestoreCompleted = true;
+  restoreStartedAt = null;
+  await setSession({
+    [SESSION_DONE_KEY]: true,
+    [SESSION_STARTED_KEY]: null,
   });
+  logDebug("restore done", { forced: !!force, pendingBefore: pending });
   return true;
 }
 
-/** Claim one live tab against pending history. Returns true if claimed. */
 async function tryClaimPending(tab) {
-  if (sessionRestoreCompleted || !tab) return false;
-  if (!hasRestoreIdentityUrl(tab.url)) return false;
+  if (sessionRestoreCompleted || !tab || !hasIdentityUrl(tab.url)) return false;
   const claimed = Core.claimPendingRestoreForTab(tabInfoList, tab);
   if (!claimed.claimed) return false;
   tabInfoList = claimed.list;
-  scheduleSaveTabInfoList();
+  scheduleSave();
   await maybeFinishRestore(false);
   return true;
 }
 
-// --- mutation queue + persistence ----------------------------------------
+// --- queue + save --------------------------------------------------------
 
-function enqueueTabMutation(fn) {
-  const run = mutationChain.then(() => fn());
+function enqueue(fn) {
+  const run = mutationChain.then(fn);
   mutationChain = run.then(
     () => undefined,
-    (err) => {
-      logDebug("tab mutation failed", err);
-    }
+    (err) => logDebug("mutation failed", err)
   );
   return run;
 }
 
-async function saveTabInfoListNow() {
-  if (saveTabInfoTimer) {
-    clearTimeout(saveTabInfoTimer);
-    saveTabInfoTimer = null;
+async function saveNow() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
   }
   try {
-    await browser.storage.local.set({ tabInfoList: tabInfoList });
-    logDebug("tabInfoList saved", {
-      tracked: Object.keys(tabInfoList).length,
-      pending: Core.countPendingRestoreRecords(tabInfoList),
-    });
+    await browser.storage.local.set({ tabInfoList });
   } catch (err) {
-    logDebug("tabInfoList save failed", err);
+    logDebug("save failed", err);
     throw err;
   }
 }
 
-function scheduleSaveTabInfoList() {
-  if (saveTabInfoTimer) clearTimeout(saveTabInfoTimer);
-  saveTabInfoTimer = setTimeout(() => {
-    saveTabInfoTimer = null;
-    // Run on the queue so we never write a half-updated list.
-    enqueueTabMutation(() => saveTabInfoListNow()).catch(() => {});
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    enqueue(() => saveNow()).catch(() => {});
   }, SAVE_DEBOUNCE_MS);
 }
 
-// --- tab list mutations (always via the queue) ---------------------------
+function putRecord(tabKey, next, previous) {
+  tabInfoList[tabKey] = next;
+  if (historyChanged(previous, next)) scheduleSave();
+}
 
-async function doSyncActiveTabs(options) {
+// --- mutations (always run on the queue) ---------------------------------
+
+async function doSync(options) {
   options = options || {};
   const tabs = await browser.tabs.query({});
   const mode = Core.getHistoryMergeMode(sessionRestoreCompleted);
 
-  logDebug("syncActiveTabs", {
-    openTabs: tabs.length,
-    mode: mode,
-    sessionRestoreCompleted: sessionRestoreCompleted,
-  });
-
-  tabInfoList = Core.mergeLiveTabsWithHistory(tabs, tabInfoList, { mode: mode });
+  tabInfoList = Core.mergeLiveTabsWithHistory(tabs, tabInfoList, { mode });
 
   if (mode === "restore") {
-    await ensureRestoreWindowStarted();
-    const finished = await maybeFinishRestore(!!options.forceCompleteRestore);
-    if (!finished) {
-      if (options.flush) await saveTabInfoListNow();
-      else scheduleSaveTabInfoList();
+    await beginRestoreWindow();
+    const done = await maybeFinishRestore(!!options.forceCompleteRestore);
+    if (!done) {
+      if (options.flush) await saveNow();
+      else scheduleSave();
     }
   } else if (options.flush) {
-    await saveTabInfoListNow();
+    await saveNow();
   } else {
-    scheduleSaveTabInfoList();
+    scheduleSave();
   }
 
   return {
     openTabs: tabs.length,
-    mode: mode,
+    mode,
     pendingRestore: Core.countPendingRestoreRecords(tabInfoList),
   };
 }
 
-/** True when this window is the one the user is looking at. */
-async function isWindowFocused(windowId) {
-  if (windowId == null) return false;
-  try {
-    const win = await browser.windows.get(windowId);
-    return !!win.focused;
-  } catch (_) {
-    return false;
-  }
-}
-
-async function doUpdateTabInfo(tabId, changeInfo, tab) {
+/**
+ * Apply a live tab update.
+ * changeInfo.userAttention = window focus (always counts as last-opened).
+ * changeInfo.active = tab activated (only if that window is focused).
+ */
+async function doUpdate(tabId, changeInfo, tab) {
   if (!tab) return;
 
-  const shouldUpdate =
-    changeInfo.status === "complete" ||
-    changeInfo.title ||
+  // Ignore noise: pure title / loading status spam. Titles refresh on popup sync.
+  const interesting =
     changeInfo.url ||
     changeInfo.active === true ||
     changeInfo.userAttention === true ||
     changeInfo.discarded !== undefined ||
     changeInfo.audible !== undefined;
-  if (!shouldUpdate) return;
+  if (!interesting) return;
 
   const tabKey = String(tabId);
 
-  // Still restoring: claim by URL, or wait until the tab has a real URL.
+  // Progressive restore: claim pending history, or wait for a real URL.
   if (!sessionRestoreCompleted) {
-    await ensureRestoreWindowStarted();
+    await beginRestoreWindow();
     if (await tryClaimPending(tab)) return;
 
-    if (!hasRestoreIdentityUrl(tab.url)) {
-      // No identity yet — don't stamp "first opened = now".
+    if (!hasIdentityUrl(tab.url)) {
       await maybeFinishRestore(false);
       return;
     }
 
-    // Real URL, no pending match: new tab opened during the restore window.
-    // firstOpened = now; lastOpened only if this window is focused.
     if (!liveRecord(tabKey)) {
-      const focused = await isWindowFocused(tab.windowId);
-      tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, null, {
-        forceFirstOpened: true,
-        forceLastOpened: focused,
-      });
-      scheduleSaveTabInfoList();
+      const focused = await windowFocused(tab.windowId);
+      putRecord(
+        tabKey,
+        Core.buildTabRecordFromLive(tab, null, {
+          forceFirstOpened: true,
+          forceLastOpened: focused,
+        }),
+        null
+      );
       await maybeFinishRestore(false);
       return;
     }
   }
 
-  // lastOpened only on real attention: focused window + (activation or focus).
   let forceLast = false;
   if (changeInfo.userAttention === true) {
     forceLast = true;
   } else if (changeInfo.active === true) {
-    forceLast = await isWindowFocused(tab.windowId);
+    forceLast = await windowFocused(tab.windowId);
   }
 
-  const existing = liveRecord(tabKey);
-  tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, existing, {
+  const previous = liveRecord(tabKey);
+  const next = Core.buildTabRecordFromLive(tab, previous, {
     forceLastOpened: forceLast,
   });
-  scheduleSaveTabInfoList();
+  putRecord(tabKey, next, previous);
 }
 
-async function doOnTabRemoved(tabId) {
+async function doRemove(tabId) {
   const tabKey = String(tabId);
-  if (liveRecord(tabKey)) {
-    delete tabInfoList[tabKey];
-    scheduleSaveTabInfoList();
-  }
+  if (!liveRecord(tabKey)) return;
+  delete tabInfoList[tabKey];
+  scheduleSave();
 }
 
-async function doOnTabCreated(tab) {
+async function doCreate(tab) {
   const tabKey = String(tab.id);
   if (liveRecord(tabKey)) return;
 
   if (!sessionRestoreCompleted) {
-    await ensureRestoreWindowStarted();
+    await beginRestoreWindow();
     if (await tryClaimPending(tab)) return;
-    // Wait for a real URL (via onUpdated) before stamping a new record.
-    if (!hasRestoreIdentityUrl(tab.url)) {
+    if (!hasIdentityUrl(tab.url)) {
       await maybeFinishRestore(false);
       return;
     }
   }
 
-  // New tab: firstOpened always. lastOpened only if the user is looking.
-  const focused = await isWindowFocused(tab.windowId);
-  tabInfoList[tabKey] = Core.buildTabRecordFromLive(tab, null, {
-    forceFirstOpened: true,
-    forceLastOpened: focused,
-  });
-  scheduleSaveTabInfoList();
+  const focused = await windowFocused(tab.windowId);
+  putRecord(
+    tabKey,
+    Core.buildTabRecordFromLive(tab, null, {
+      forceFirstOpened: true,
+      forceLastOpened: focused,
+    }),
+    null
+  );
   if (!sessionRestoreCompleted) await maybeFinishRestore(false);
 }
 
-// --- public entry points -------------------------------------------------
-
-async function syncActiveTabs(options) {
-  await ensureReady();
-  return enqueueTabMutation(() => doSyncActiveTabs(options));
-}
-
-async function updateTabInfo(tabId, changeInfo, tab) {
-  if (!tab) return;
-  await ensureReady();
-  return enqueueTabMutation(() => doUpdateTabInfo(tabId, changeInfo, tab));
-}
-
-async function onTabActivated(activeInfo) {
-  try {
-    await ensureReady();
-    const tab = await browser.tabs.get(activeInfo.tabId);
-    // tabs.onActivated also fires for the active tab in unfocused windows
-    // (new window, background window). Only count focused windows.
-    await updateTabInfo(activeInfo.tabId, { active: true }, tab);
-  } catch (err) {
-    logDebug("onTabActivated failed", err);
-  }
-}
-
-/** User focused a window → its active tab was just looked at. */
-async function onWindowFocusChanged(windowId) {
-  if (
-    windowId === browser.windows.WINDOW_ID_NONE ||
-    windowId == null
-  ) {
-    return;
-  }
-  try {
-    await ensureReady();
-    const tabs = await browser.tabs.query({ active: true, windowId: windowId });
-    const tab = tabs && tabs[0];
-    if (!tab) return;
-    await updateTabInfo(tab.id, { userAttention: true }, tab);
-  } catch (err) {
-    logDebug("onWindowFocusChanged failed", err);
-  }
-}
-
-async function onTabRemoved(tabId) {
-  await ensureReady();
-  return enqueueTabMutation(() => doOnTabRemoved(tabId));
-}
-
-async function onTabCreated(tab) {
-  await ensureReady();
-  return enqueueTabMutation(() => doOnTabCreated(tab));
-}
-
-async function handleSetDebugMode(enabled) {
-  await ensureReady();
-  debugMode = !!enabled;
-  await browser.storage.local.set({ debugMode: debugMode });
-  logDebug("debugMode set", { debugMode: debugMode });
-  return { ok: true, debugMode: debugMode };
-}
-
-async function handleGetDebugReport() {
-  await ensureReady();
-  let storageKeys = [];
-  try {
-    const all = await browser.storage.local.get(null);
-    storageKeys = Object.keys(all || {});
-  } catch (_) {
-    /* ignore */
-  }
-  return {
-    ok: true,
-    report: {
-      generatedAt: new Date().toISOString(),
-      debugMode: debugMode,
-      trackedTabs: Object.keys(Core.stripPendingRestoreRecords(tabInfoList))
-        .length,
-      pendingRestore: Core.countPendingRestoreRecords(tabInfoList),
-      storageKeys: storageKeys,
-      logs: debugLogs.slice(),
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-      manifestVersion: 2,
-      sessionRestoreCompleted: sessionRestoreCompleted,
-      restoreStartedAt: restoreStartedAt,
-      hasSessionStorage: hasSessionStorage(),
-    },
-  };
-}
-
-async function handleSyncAndGetTabInfo() {
-  await ensureReady();
-  const syncResult = await enqueueTabMutation(() =>
-    doSyncActiveTabs({ flush: true })
-  );
-  const liveList = Core.stripPendingRestoreRecords(tabInfoList);
-  return {
-    ok: true,
-    tabInfoList: liveList,
-    meta: {
-      openTabs: syncResult.openTabs,
-      tracked: Object.keys(liveList).length,
-      pendingRestore: syncResult.pendingRestore,
-      mode: syncResult.mode,
-      sessionRestoreCompleted: sessionRestoreCompleted,
-      source: "background-sync",
-    },
-  };
-}
+// --- public API (await ready, then queue) --------------------------------
 
 function ensureReady() {
   if (!readyPromise) {
-    readyPromise = initializeBackground().catch((err) => {
+    readyPromise = init().catch((err) => {
       readyPromise = null;
       throw err;
     });
@@ -471,64 +338,129 @@ function ensureReady() {
   return readyPromise;
 }
 
-async function initializeBackground() {
+async function init() {
+  const result = await browser.storage.local.get([
+    "tabInfoList",
+    "debugMode",
+    "debugLogs",
+  ]);
+  tabInfoList = result.tabInfoList || {};
+  debugMode = !!result.debugMode;
+  debugLogs = Array.isArray(result.debugLogs)
+    ? result.debugLogs.slice(-DEBUG_LOG_MAX)
+    : [];
+  backfillTimestamps(tabInfoList);
+  await loadSessionRestoreState();
+  await enqueue(() => doSync({ flush: true }));
+  logDebug("init done", {
+    tracked: Object.keys(tabInfoList).length,
+    restoreDone: sessionRestoreCompleted,
+  });
+}
+
+async function onActivated(activeInfo) {
   try {
-    const result = await browser.storage.local.get([
-      "tabInfoList",
-      "debugMode",
-      "debugLogs",
-    ]);
-    tabInfoList = result.tabInfoList || {};
-    debugMode = !!result.debugMode;
-    debugLogs = Array.isArray(result.debugLogs)
-      ? result.debugLogs.slice(-DEBUG_LOG_MAX)
-      : [];
-
-    backfillTimestamps(tabInfoList);
-    await loadSessionRestoreState();
-
-    logDebug("background init start", {
-      stored: Object.keys(tabInfoList).length,
-      pending: Core.countPendingRestoreRecords(tabInfoList),
-      sessionRestoreCompleted: sessionRestoreCompleted,
-      restoreStartedAt: restoreStartedAt,
-    });
-
-    await enqueueTabMutation(() => doSyncActiveTabs({ flush: true }));
-    logDebug("background init done", {
-      tracked: Object.keys(tabInfoList).length,
-      pending: Core.countPendingRestoreRecords(tabInfoList),
-      sessionRestoreCompleted: sessionRestoreCompleted,
-    });
+    await ensureReady();
+    const tab = await browser.tabs.get(activeInfo.tabId);
+    await enqueue(() => doUpdate(tab.id, { active: true }, tab));
   } catch (err) {
-    console.error("Background initial load failed:", err);
-    logDebug("background init failed", err);
-    throw err;
+    logDebug("onActivated failed", err);
   }
+}
+
+async function onFocusChanged(windowId) {
+  if (windowId == null || windowId === browser.windows.WINDOW_ID_NONE) return;
+  try {
+    await ensureReady();
+    const tabs = await browser.tabs.query({ active: true, windowId });
+    const tab = tabs && tabs[0];
+    if (!tab) return;
+    await enqueue(() => doUpdate(tab.id, { userAttention: true }, tab));
+  } catch (err) {
+    logDebug("onFocusChanged failed", err);
+  }
+}
+
+async function handleSyncAndGetTabInfo() {
+  await ensureReady();
+  const syncResult = await enqueue(() => doSync({ flush: true }));
+  const live = Core.stripPendingRestoreRecords(tabInfoList);
+  return {
+    ok: true,
+    tabInfoList: live,
+    meta: {
+      openTabs: syncResult.openTabs,
+      tracked: Object.keys(live).length,
+      pendingRestore: syncResult.pendingRestore,
+      mode: syncResult.mode,
+      sessionRestoreCompleted,
+      source: "background-sync",
+    },
+  };
+}
+
+async function handleSetDebugMode(enabled) {
+  await ensureReady();
+  debugMode = !!enabled;
+  await browser.storage.local.set({ debugMode });
+  return { ok: true, debugMode };
+}
+
+async function handleGetDebugReport() {
+  await ensureReady();
+  let storageKeys = [];
+  try {
+    storageKeys = Object.keys((await browser.storage.local.get(null)) || {});
+  } catch (_) {
+    /* ignore */
+  }
+  return {
+    ok: true,
+    report: {
+      generatedAt: new Date().toISOString(),
+      debugMode,
+      trackedTabs: Object.keys(Core.stripPendingRestoreRecords(tabInfoList))
+        .length,
+      pendingRestore: Core.countPendingRestoreRecords(tabInfoList),
+      storageKeys,
+      logs: debugLogs.slice(),
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      manifestVersion: 2,
+      sessionRestoreCompleted,
+      restoreStartedAt,
+      hasSessionStorage: hasSessionStorage(),
+    },
+  };
 }
 
 // --- listeners -----------------------------------------------------------
 
 browser.tabs.onCreated.addListener((tab) => {
-  onTabCreated(tab).catch((err) => logDebug("onTabCreated failed", err));
+  ensureReady()
+    .then(() => enqueue(() => doCreate(tab)))
+    .catch((err) => logDebug("onCreated failed", err));
 });
+
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  updateTabInfo(tabId, changeInfo, tab).catch((err) =>
-    logDebug("updateTabInfo failed", err)
-  );
+  ensureReady()
+    .then(() => enqueue(() => doUpdate(tabId, changeInfo, tab)))
+    .catch((err) => logDebug("onUpdated failed", err));
 });
+
 browser.tabs.onActivated.addListener((activeInfo) => {
-  onTabActivated(activeInfo).catch((err) =>
-    logDebug("onTabActivated failed", err)
-  );
+  onActivated(activeInfo).catch((err) => logDebug("onActivated failed", err));
 });
+
 browser.windows.onFocusChanged.addListener((windowId) => {
-  onWindowFocusChanged(windowId).catch((err) =>
-    logDebug("onWindowFocusChanged failed", err)
+  onFocusChanged(windowId).catch((err) =>
+    logDebug("onFocusChanged failed", err)
   );
 });
+
 browser.tabs.onRemoved.addListener((tabId) => {
-  onTabRemoved(tabId).catch((err) => logDebug("onTabRemoved failed", err));
+  ensureReady()
+    .then(() => enqueue(() => doRemove(tabId)))
+    .catch((err) => logDebug("onRemoved failed", err));
 });
 
 browser.runtime.onMessage.addListener((request) => {
@@ -546,5 +478,5 @@ browser.runtime.onMessage.addListener((request) => {
 });
 
 ensureReady().catch((err) => {
-  console.error("Background ensureReady failed:", err);
+  console.error("Background init failed:", err);
 });
