@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "xNxP Tabs",
-  "version": "1.1.38",
+  "version": "1.1.39",
   "description": "ADHD friendly tab manager: search open tabs, unload to free memory, close duplicates, last opened age. Default shortcut Ctrl+Shift+U (Cmd+Shift+U on Mac). Pin the icon so it stays visible.",
   "icons": {
     "16": "icons/icon16.png",
@@ -38,12 +38,15 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "xnxp-tabs@gl00ten.net",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": [
           "none"
         ]
-      },
-      "strict_min_version": "115.0"
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   }
 }
