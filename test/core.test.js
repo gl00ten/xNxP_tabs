@@ -820,9 +820,10 @@ describe("formatWindowLabel", () => {
 });
 
 describe("formatDateParts", () => {
-  it("splits date and time", () => {
+  it("splits weekday, date, and time", () => {
+    // 2020-01-15 was a Wednesday
     const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime());
-    assert.equal(parts.date, "20.01.15");
+    assert.equal(parts.date, "Wed 20.01.15");
     assert.equal(parts.time, "10:05");
   });
 });
