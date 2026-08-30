@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # Regenerate shipped toolbar/store icons from the design source.
-# Not part of the extension package (see .webextignore / pack extension.sh).
+# Not part of the extension package (see .webextignore / pack-extension.sh).
 #
 # Usage (from repo root):
-#   ./tools/generate icons.sh
-#   ./tools/generate icons.sh path/to/other source.png
+#   ./tools/generate-icons.sh
+#   ./tools/generate-icons.sh path/to/other-source.png
 #
-# Default source (first that exists):
-#   tools/icon source/ico_simplified.png
-#   tools/icon source/ico_ori.png
+# Default source: newest *.png under tools/icon-source/
 # Writes: icons/icon{16,32,48,64,96,128}.png
 
 set -euo pipefail
@@ -20,15 +18,7 @@ SIZES=(16 32 48 64 96 128)
 if [[ "${1:-}" != "" ]]; then
   SRC="$1"
 else
-  SRC=""
-  for candidate in \
-    "$ROOT/tools/icon-source/ico_simplified.png" \
-    "$ROOT/tools/icon-source/ico_ori.png"; do
-    if [[ -f "$candidate" ]]; then
-      SRC="$candidate"
-      break
-    fi
-  done
+  SRC="$(ls -t "$ROOT"/tools/icon-source/*.png 2>/dev/null | head -1 || true)"
 fi
 
 if ! command -v magick >/dev/null 2>&1; then
@@ -36,8 +26,8 @@ if ! command -v magick >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "$SRC" || ! -f "$SRC" ]]; then
-  echo "error: source image not found (expected tools/icon-source/ico_simplified.png or ico_ori.png)" >&2
+if [[ -z "${SRC:-}" || ! -f "$SRC" ]]; then
+  echo "error: source image not found in tools/icon-source/" >&2
   exit 1
 fi
 
