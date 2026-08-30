@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build a store-ready zip with only runtime extension files.
+# Build a store ready zip with only runtime extension files.
 # Excludes tools/, test/, git metadata, and docs.
 #
 # Usage (from repo root, or any checkout of this tree):
-#   ./tools/pack-extension.sh
-#   ./tools/pack-extension.sh xnxp-tabs-firefox.zip
-#   ./tools/pack-extension.sh /abs/path/out.zip
+#   ./tools/pack extension.sh
+#   ./tools/pack extension.sh xnxp tabs firefox.zip
+#   ./tools/pack extension.sh /abs/path/out.zip
 #
-# Default output: dist/xnxp-tabs.zip
+# Default output: dist/xnxp tabs.zip
 
 set -euo pipefail
 

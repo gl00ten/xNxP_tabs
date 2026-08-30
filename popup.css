@@ -529,7 +529,7 @@ tbody tr:last-child td {
   width: 104px;
 }
 
-/* Two-line date/time — narrower than single-line "YY.MM.DD HH:mm" */
+/* Two line date/time, narrower than single line "YY.MM.DD HH:mm" */
 .col-date {
   width: 58px;
   color: #183c5f;

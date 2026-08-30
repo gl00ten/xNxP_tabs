@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Build upload zips for both store branches without changing your current checkout.
 #
-#   firefox_extension → dist/xnxp-tabs-firefox-<version>.zip  (AMO)
-#   main              → dist/xnxp-tabs-chrome-<version>.zip   (Chrome Web Store)
+#   firefox_extension → dist/xnxp tabs firefox-<version>.zip  (AMO)
+#   main              → dist/xnxp tabs chrome-<version>.zip   (Chrome Web Store)
 #
 # Usage (from repo root):
-#   ./tools/pack-both-stores.sh
+#   ./tools/pack both stores.sh
 
 set -euo pipefail
 

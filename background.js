@@ -45,7 +45,7 @@ function logDebug(message, data = null) {
   } catch (_) {
     /* ignore */
   }
-  // Debug only — do not spam storage on every log
+  // Debug only, do not spam storage on every log
 }
 
 function backfillTimestamps(list) {
@@ -66,7 +66,7 @@ function hasSessionStorage() {
   return !!(browser.storage && browser.storage.session);
 }
 
-/** URL good enough to match history during restore (not empty / new-tab). */
+/** URL good enough to match history during restore (not empty / new tab). */
 function hasIdentityUrl(url) {
   url = url || "";
   if (!url || url.startsWith("about:")) return false;
@@ -242,7 +242,7 @@ async function doSync(options) {
 
 /**
  * Apply a live tab update.
- * changeInfo.userAttention = window focus (always counts as last-opened).
+ * changeInfo.userAttention = window focus (always counts as last opened).
  * changeInfo.active = tab activated (only if that window is focused).
  */
 async function doUpdate(tabId, changeInfo, tab) {
