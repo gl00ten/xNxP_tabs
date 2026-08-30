@@ -1,6 +1,7 @@
-// Chrome MV3 service worker: load polyfill + pure helpers first
-importScripts("browser-polyfill.js", "lib/core.js");
-
+// Chrome service worker: load deps here. Firefox event page: already in manifest.
+if (typeof importScripts === "function") {
+  importScripts("browser-polyfill.js", "lib/core.js");
+}
 const Core = globalThis.xNxPCore;
 
 // Session restore (cleared when the browser quits).

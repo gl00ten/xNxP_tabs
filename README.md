@@ -28,9 +28,10 @@ Customize the shortcut at `chrome://extensions/shortcuts`.
 
 ## Notes
 
-- **`main`**: Chrome Manifest V3 (service worker).
-- **`firefox_extension`**: Firefox Manifest V2 (AMO).
-- Uses `webextension-polyfill` for `browser.*` APIs.
+- **`main`**: Chrome Manifest V3. Background via `service_worker` (+ `importScripts` in `background.js`).
+- **`firefox_extension`**: Firefox Manifest V3 (AMO). Background via `scripts` (event page).
+- Shared logic (`lib/core.js`, popup, most of background) is the same on both branches.
+- Uses `webextension-polyfill` for `browser.*` on Chrome; Firefox already has native `browser.*`.
 - Chrome Web Store caps the short description at 132 characters; put longer store text in the dashboard detailed description.
 - Large design sources (`ori_icon*.png`) are gitignored.
 
