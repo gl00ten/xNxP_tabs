@@ -95,11 +95,7 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       if (browser.commands && browser.commands.getAll) {
         const cmds = await browser.commands.getAll();
-        const cmd = (cmds || []).find(
-          (c) =>
-            c.name === "_execute_browser_action" ||
-            c.name === "_execute_action"
-        );
+        const cmd = (cmds || []).find((c) => c.name === "_execute_action");
         if (cmd && cmd.shortcut) {
           label = formatShortcutLabel(cmd.shortcut);
         }

@@ -64,14 +64,10 @@ function hasSessionStorage() {
   return !!(browser.storage && browser.storage.session);
 }
 
-/** URL good enough to match history during restore (not empty / new-tab). */
+/** URL good enough to match history during restore (not empty / about:). */
 function hasIdentityUrl(url) {
   url = url || "";
-  if (!url || url.startsWith("about:")) return false;
-  if (url.startsWith("chrome://newtab")) return false;
-  if (url.startsWith("edge://newtab")) return false;
-  if (url.startsWith("chrome://new-tab-page")) return false;
-  return true;
+  return !!url && !url.startsWith("about:");
 }
 
 function liveRecord(tabKey) {
@@ -219,7 +215,8 @@ async function doSync(options) {
 
   if (mode === "restore") {
     await beginRestoreWindow();
-    const done = await maybeFinishRestore(!!options.forceCompleteRestore);
+    // Completes when pending is empty or restore grace has elapsed.
+    const done = await maybeFinishRestore(false);
     if (!done) {
       if (options.flush) await saveNow();
       else scheduleSave();
