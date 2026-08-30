@@ -36,9 +36,10 @@ Customize the shortcut:
 
 ## Notes
 
-- **`firefox_extension`**: Firefox Manifest V3 (AMO). Background uses `scripts` (Firefox event page); Chrome uses a service worker.
-- **`main`**: Chrome Manifest V3.
-- Uses `webextension-polyfill` for `browser.*` APIs.
+- **`firefox_extension`**: Firefox Manifest V3 (AMO). Background via `scripts` (event page).
+- **`main`**: Chrome Manifest V3. Background via `service_worker` (+ `importScripts` in `background.js`).
+- Shared logic (`lib/core.js`, popup, most of background) is the same on both branches.
+- Uses `webextension-polyfill` for `browser.*` on Chrome; Firefox already has native `browser.*`.
 - Large design sources (`ori_icon*.png`) are gitignored.
 
 ## Development

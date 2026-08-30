@@ -1,5 +1,7 @@
-// Firefox MV3: polyfill + core loaded via manifest background.scripts
-// (Firefox uses event-page scripts; Chrome uses service_worker + importScripts.)
+// Chrome service worker: load deps here. Firefox event page: already in manifest.
+if (typeof importScripts === "function") {
+  importScripts("browser-polyfill.js", "lib/core.js");
+}
 const Core = globalThis.xNxPCore;
 
 // Session restore (cleared when the browser quits).
@@ -64,10 +66,14 @@ function hasSessionStorage() {
   return !!(browser.storage && browser.storage.session);
 }
 
-/** URL good enough to match history during restore (not empty / about:). */
+/** URL good enough to match history during restore (not empty / new-tab). */
 function hasIdentityUrl(url) {
   url = url || "";
-  return !!url && !url.startsWith("about:");
+  if (!url || url.startsWith("about:")) return false;
+  if (url.startsWith("chrome://newtab")) return false;
+  if (url.startsWith("edge://newtab")) return false;
+  if (url.startsWith("chrome://new-tab-page")) return false;
+  return true;
 }
 
 function liveRecord(tabKey) {
