@@ -552,6 +552,7 @@ td.col-actions {
   white-space: normal;
   overflow: hidden;
   vertical-align: middle;
+  text-align: left;
 }
 
 .col-date .date-line {
@@ -571,6 +572,7 @@ td.col-actions {
   font-weight: 600;
   color: #5a7390;
   margin-top: 1px;
+  padding-left: 2px; /* sits under the date, still left aligned */
 }
 
 /* min-width: 0 is required for text-overflow inside table-layout: fixed */
@@ -587,6 +589,7 @@ th.col-date {
   text-shadow: 0 1px 2px rgba(0, 45, 100, 0.7);
   font-weight: 700;
   white-space: normal;
+  text-align: left;
 }
 
 /* ---------- Main tab cell ---------- */
