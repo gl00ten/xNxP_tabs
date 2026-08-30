@@ -70,6 +70,11 @@ document.addEventListener("DOMContentLoaded", function () {
     6: "Hey! The ☰ menu has unload tools, duplicates, and more. Give it a peek!",
     14: "Still exploring? ☰ on the right is packed — unload, clean dupes, and more!",
   };
+  /** Rare Ko-fi nudge after the Best counter has hit this many tabs. */
+  const KOFI_TIP_MIN_BEST = 100;
+  const KOFI_TIP_CHANCE = 0.02;
+  const KOFI_TIP_MESSAGE =
+    "Loving the chaos? Tip me a coffee on Ko-fi — link’s in the ••• menu ☕";
 
   function defaultShortcutLabel() {
     const isMac =
@@ -135,14 +140,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function maybeShowMascotTip() {
     try {
-      const stored = await browser.storage.local.get("popupOpenCount");
+      const stored = await browser.storage.local.get([
+        "popupOpenCount",
+        "personalBest",
+      ]);
       const next = (stored.popupOpenCount || 0) + 1;
       await browser.storage.local.set({ popupOpenCount: next });
 
+      let msg = null;
       if (SPEECH_BUBBLE_OPENS.has(next)) {
-        const msg =
+        msg =
           SPEECH_MESSAGES[next] ||
           "Psst — try the ☰ menu on the right. This extension does more stuff!";
+      } else {
+        const best = stored.personalBest || personalBest || 0;
+        if (best >= KOFI_TIP_MIN_BEST && Math.random() < KOFI_TIP_CHANCE) {
+          msg = KOFI_TIP_MESSAGE;
+        }
+      }
+
+      if (msg) {
         // Slight delay so the list can paint first
         setTimeout(() => showSpeechBubble(msg), 400);
       }
