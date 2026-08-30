@@ -2,19 +2,29 @@
 # Build a store-ready zip with only runtime extension files.
 # Excludes tools/, test/, git metadata, and docs.
 #
-# Usage (from repo root):
+# Usage (from repo root, or any checkout of this tree):
 #   ./tools/pack-extension.sh
-# Output: dist/xnxp-tabs.zip
+#   ./tools/pack-extension.sh xnxp-tabs-firefox.zip
+#   ./tools/pack-extension.sh /abs/path/out.zip
+#
+# Default output: dist/xnxp-tabs.zip
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT/dist"
-ZIP="$OUT_DIR/xnxp-tabs.zip"
 STAGE="$OUT_DIR/stage"
 
+if [[ "${1:-}" == "" ]]; then
+  ZIP="$OUT_DIR/xnxp-tabs.zip"
+elif [[ "$1" == /* ]]; then
+  ZIP="$1"
+else
+  ZIP="$OUT_DIR/$1"
+fi
+
 rm -rf "$STAGE"
-mkdir -p "$STAGE/icons" "$STAGE/lib"
+mkdir -p "$STAGE/icons" "$STAGE/lib" "$(dirname "$ZIP")"
 
 cp "$ROOT/manifest.json" "$STAGE/"
 cp "$ROOT/background.js" "$STAGE/"
@@ -31,7 +41,6 @@ if compgen -G "$STAGE/icons/ico_*" > /dev/null; then
   exit 1
 fi
 
-mkdir -p "$OUT_DIR"
 rm -f "$ZIP"
 (
   cd "$STAGE"
