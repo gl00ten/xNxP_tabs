@@ -13,10 +13,32 @@ describe("isDiscardableUrl", () => {
     assert.equal(core.isDiscardableUrl("about:blank"), false);
     assert.equal(core.isDiscardableUrl("moz-extension://abc/x"), false);
     assert.equal(core.isDiscardableUrl("chrome://settings"), false);
+    assert.equal(core.isDiscardableUrl("chrome-extension://abc/x"), false);
+    assert.equal(core.isDiscardableUrl("edge://settings"), false);
   });
 
   it("accepts normal web urls", () => {
     assert.equal(core.isDiscardableUrl("https://example.com"), true);
+  });
+});
+
+describe("getLastOpenedTsForTab", () => {
+  it("prefers the newer of stored lastOpenedTs and tab.lastAccessed", () => {
+    const tab = { id: 1, lastAccessed: 200 };
+    const list = { "1": { lastOpenedTs: 100 } };
+    assert.equal(core.getLastOpenedTsForTab(tab, list), 200);
+    assert.equal(
+      core.getLastOpenedTsForTab({ id: 1, lastAccessed: 50 }, list),
+      100
+    );
+  });
+
+  it("falls back to lastAccessed or zero when storage is empty", () => {
+    assert.equal(
+      core.getLastOpenedTsForTab({ id: 2, lastAccessed: 77 }, {}),
+      77
+    );
+    assert.equal(core.getLastOpenedTsForTab({ id: 3 }, {}), 0);
   });
 });
 
@@ -441,8 +463,8 @@ describe("session-lifetime restore (SW restarts)", () => {
     assert.equal(second.list["11"].lastOpenedTs, 500);
   });
 
-  it("popup-facing sync returns fully remapped records after startup", () => {
-    const sessionState = { restoreCompleted: false };
+  it("live-mode merge against pre-restore storage loses remapped history", () => {
+    // Why popup must use background sync results, not raw storage + live merge.
     const preRestoreStored = {
       "1": {
         url: "https://a.com",
@@ -451,37 +473,23 @@ describe("session-lifetime restore (SW restarts)", () => {
         lastOpenedTs: 99,
         lastOpened: "session-last",
       },
-      "2": {
-        url: "https://b.com",
-        firstOpenedTs: 7,
-        firstOpened: "b-first",
-        lastOpenedTs: 8,
-        lastOpened: "b-last",
-      },
     };
     const live = [
       { id: 100, windowId: 1, title: "A", url: "https://a.com", lastAccessed: 10 },
-      { id: 101, windowId: 1, title: "B", url: "https://b.com", lastAccessed: 20 },
     ];
-
-    // What the background returns after syncAndGetTabInfo
-    const synced = core.runSessionAwareSync(live, preRestoreStored, sessionState, {
-      nowMs: now,
-    });
-    assert.equal(synced.mode, "restore");
-    assert.equal(synced.list["100"].firstOpenedTs, 42);
-    assert.equal(synced.list["101"].firstOpenedTs, 7);
-
-    // Wrong popup path: live-merge against pre-restore storage loses history
     const premature = core.mergeLiveTabsWithHistory(live, preRestoreStored, {
       mode: "live",
       nowMs: now,
     });
     assert.notEqual(premature["100"].firstOpenedTs, 42);
 
-    // Correct popup path: use only background-returned records
+    const synced = core.runSessionAwareSync(
+      live,
+      preRestoreStored,
+      { restoreCompleted: false },
+      { nowMs: now }
+    );
     assert.equal(synced.list["100"].firstOpenedTs, 42);
-    assert.equal(synced.list["101"].firstOpenedTs, 7);
   });
 
   it("genuinely new duplicate after startup does not inherit another tab’s history", () => {
@@ -618,6 +626,42 @@ describe("session-lifetime restore (SW restarts)", () => {
     assert.equal(core.countPendingRestoreRecords(claimed.list), 0);
     assert.equal(claimed.list["2"], undefined);
   });
+
+  it("claimPendingRestoreForTab no-ops without a matching pending URL", () => {
+    const list = {
+      "2": {
+        id: 2,
+        url: "https://b.com",
+        firstOpenedTs: 20,
+        pendingRestore: true,
+      },
+    };
+    const miss = core.claimPendingRestoreForTab(
+      list,
+      { id: 9, url: "https://other.com", lastAccessed: 1 },
+      { nowMs: now }
+    );
+    assert.equal(miss.claimed, false);
+    assert.equal(core.countPendingRestoreRecords(miss.list), 1);
+
+    const empty = core.claimPendingRestoreForTab(
+      list,
+      { id: 9, url: "", lastAccessed: 1 },
+      { nowMs: now }
+    );
+    assert.equal(empty.claimed, false);
+  });
+
+  it("stripPendingRestoreRecords drops placeholders only", () => {
+    const list = {
+      "1": { id: 1, url: "https://a.com", pendingRestore: true },
+      "2": { id: 2, url: "https://b.com", firstOpenedTs: 1 },
+    };
+    const live = core.stripPendingRestoreRecords(list);
+    assert.equal(live["1"], undefined);
+    assert.equal(live["2"].firstOpenedTs, 1);
+    assert.equal(core.countPendingRestoreRecords(live), 0);
+  });
 });
 
 describe("selectUnloadListedIds", () => {
@@ -643,6 +687,18 @@ describe("selectUnloadListedIds", () => {
     const ids = core.selectUnloadListedIds(tabs, [1, 2]);
     assert.deepEqual(ids.sort((a, b) => a - b), [1, 2]);
   });
+
+  it("skips pinned, already discarded, and internal URLs", () => {
+    const tabs = [
+      { id: 1, url: "https://ok.com", active: false, pinned: false, discarded: false },
+      { id: 2, url: "https://pin.com", active: false, pinned: true, discarded: false },
+      { id: 3, url: "https://sleep.com", active: false, pinned: false, discarded: true },
+      { id: 4, url: "about:blank", active: false, pinned: false, discarded: false },
+      { id: 5, url: "chrome://settings", active: false, pinned: false, discarded: false },
+    ];
+    const ids = core.selectUnloadListedIds(tabs, [1, 2, 3, 4, 5]);
+    assert.deepEqual(ids, [1]);
+  });
 });
 
 describe("selectUnloadInWindowIds", () => {
@@ -654,6 +710,16 @@ describe("selectUnloadInWindowIds", () => {
     ];
     const ids = core.selectUnloadInWindowIds(tabs);
     assert.deepEqual(ids.sort((a, b) => a - b), [11, 12]);
+  });
+
+  it("skips pinned and discarded tabs", () => {
+    const tabs = [
+      { id: 1, url: "https://a.com", active: true, pinned: false, discarded: false },
+      { id: 2, url: "https://b.com", active: false, pinned: true, discarded: false },
+      { id: 3, url: "https://c.com", active: false, pinned: false, discarded: true },
+      { id: 4, url: "https://d.com", active: false, pinned: false, discarded: false },
+    ];
+    assert.deepEqual(core.selectUnloadInWindowIds(tabs), [4]);
   });
 });
 
@@ -743,6 +809,14 @@ describe("formatWindowLabel", () => {
       "Work"
     );
   });
+
+  it("falls back to active tab title, then Window id", () => {
+    assert.equal(
+      core.formatWindowLabel({ id: 3, title: "" }, { title: "Docs" }),
+      "Docs"
+    );
+    assert.equal(core.formatWindowLabel({ id: 9, title: "" }, null), "Window 9");
+  });
 });
 
 describe("formatDateParts", () => {
@@ -794,8 +868,8 @@ describe("buildWindowUnloadRows", () => {
   });
 });
 
-describe("Chrome discard calls (tabs.discard)", () => {
-  it("calls discard once per id, never with an array, skips active tabs", async () => {
+describe("discardTabIds", () => {
+  it("Chrome path: one id per call, never an array", async () => {
     const calls = [];
     const discardFn = (arg) => {
       calls.push(arg);
@@ -808,19 +882,40 @@ describe("Chrome discard calls (tabs.discard)", () => {
       { id: 102, url: "https://b.com", active: false, pinned: false, discarded: false },
       { id: 103, url: "https://c.com", active: false, pinned: false, discarded: false },
     ];
-    const listedIds = [100, 101, 102, 103];
-
-    // Same composition as the popup: selectUnloadListedIds + discardTabIds one-by-one
-    const ids = core.selectUnloadListedIds(liveTabs, listedIds);
+    const ids = core.selectUnloadListedIds(liveTabs, [100, 101, 102, 103]);
     const n = await core.discardTabIds(ids, discardFn, { oneByOne: true });
     assert.equal(n, 3);
     assert.deepEqual(calls, [101, 102, 103]);
-    for (const arg of calls) {
-      assert.equal(Array.isArray(arg), false);
-      assert.equal(typeof arg, "number");
-    }
-    assert.ok(!calls.includes(100));
     assert.ok(!calls.some((a) => Array.isArray(a)));
+  });
+
+  it("Firefox path: batches ids in one array call", async () => {
+    const calls = [];
+    const discardFn = (arg) => {
+      calls.push(arg);
+      return Promise.resolve();
+    };
+    const n = await core.discardTabIds([1, 2, 3], discardFn, {
+      oneByOne: false,
+      chunkSize: 80,
+    });
+    assert.equal(n, 3);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], [1, 2, 3]);
+  });
+
+  it("falls back to one-by-one when a batch reject", async () => {
+    const calls = [];
+    const discardFn = (arg) => {
+      calls.push(arg);
+      if (Array.isArray(arg)) return Promise.reject(new Error("no batch"));
+      return Promise.resolve();
+    };
+    const n = await core.discardTabIds([10, 11], discardFn, { oneByOne: false });
+    assert.equal(n, 2);
+    assert.ok(calls.some((a) => Array.isArray(a)));
+    assert.ok(calls.includes(10));
+    assert.ok(calls.includes(11));
   });
 });
 
