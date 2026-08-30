@@ -691,12 +691,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (debugStatus) debugStatus.textContent = text || "";
   }
 
-  // Restore previous search + audio filter + sort state
+  // Restore previous search + sort state (audio filter is session-only)
   (async () => {
     try {
       const result = await browser.storage.local.get([
         "popupSearch",
-        "popupShowOnlyAudible",
         "popupSortField",
         "popupSortOrder",
         "debugMode",
@@ -705,10 +704,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (result.popupSearch) {
         searchInput.value = result.popupSearch;
       }
-      if (result.popupShowOnlyAudible) {
-        showOnlyAudible = true;
-        audioFilterCheckbox.checked = true;
-      }
+      // Playing audio always starts unchecked when the popup opens
+      showOnlyAudible = false;
+      if (audioFilterCheckbox) audioFilterCheckbox.checked = false;
       if (result.popupSortField) {
         sortField = result.popupSortField;
         sortOrder = result.popupSortOrder || 1;
@@ -854,10 +852,8 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   if (audioFilterCheckbox) {
-    audioFilterCheckbox.addEventListener("change", async () => {
+    audioFilterCheckbox.addEventListener("change", () => {
       showOnlyAudible = audioFilterCheckbox.checked;
-
-      await browser.storage.local.set({ popupShowOnlyAudible: showOnlyAudible });
       applyFilters();
       renderTable();
     });
@@ -1049,10 +1045,7 @@ document.addEventListener("DOMContentLoaded", function () {
         searchInput.value = "";
         showOnlyAudible = false;
         if (audioFilterCheckbox) audioFilterCheckbox.checked = false;
-        await browser.storage.local.set({
-          popupSearch: "",
-          popupShowOnlyAudible: false,
-        });
+        await browser.storage.local.set({ popupSearch: "" });
         applyFilters();
         renderTable();
       });
