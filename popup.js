@@ -112,6 +112,17 @@ document.addEventListener("DOMContentLoaded", function () {
     if (shortcutLabelEl) shortcutLabelEl.textContent = label;
   }
 
+  function updateExtensionVersionLabel() {
+    const el = document.getElementById("extension-version");
+    if (!el) return;
+    try {
+      const version = browser.runtime.getManifest().version;
+      el.textContent = version ? "Version " + version : "";
+    } catch (_) {
+      el.textContent = "";
+    }
+  }
+
   function hideSpeechBubble() {
     if (speechBubble) speechBubble.hidden = true;
   }
@@ -734,6 +745,7 @@ document.addEventListener("DOMContentLoaded", function () {
       renderTable();
       updateSortIndicators();
       updateShortcutTip();
+      updateExtensionVersionLabel();
       maybeShowMascotTip();
 
       // Focus and select the search input so the user can immediately replace previous text by typing
