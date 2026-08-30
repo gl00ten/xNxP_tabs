@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Regenerate shipped toolbar/store icons from the design source.
-# Not part of the extension package (see .webextignore / pack-extension.sh).
+# Not part of the extension package (see .webextignore / pack extension.sh).
 #
 # Usage (from repo root):
-#   ./tools/generate-icons.sh
-#   ./tools/generate-icons.sh path/to/other-source.png
+#   ./tools/generate icons.sh
+#   ./tools/generate icons.sh path/to/other source.png
 #
 # Default source (first that exists):
-#   tools/icon-source/ico_simplified.png
-#   tools/icon-source/ico_ori.png
+#   tools/icon source/ico_simplified.png
+#   tools/icon source/ico_ori.png
 # Writes: icons/icon{16,32,48,64,96,128}.png
 
 set -euo pipefail

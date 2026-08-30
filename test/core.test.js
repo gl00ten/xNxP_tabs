@@ -242,7 +242,7 @@ describe("mergeLiveTabsWithHistory", () => {
       mode: "restore",
       nowMs: now,
     });
-    // Fresh timestamps from lastAccessed — not stolen from empty-URL pool
+    // Fresh timestamps from lastAccessed, not stolen from empty URL pool
     assert.equal(merged["10"].lastOpenedTs, 100);
     assert.equal(merged["11"].lastOpenedTs, 200);
     assert.notEqual(merged["10"].firstOpenedTs, 10);
@@ -354,7 +354,7 @@ describe("mergeLiveTabsWithHistory", () => {
       1
     );
 
-    // Later the second tab appears — full sync must retain original firstOpenedTs
+    // Later the second tab appears, full sync must retain original firstOpenedTs
     const liveFull = [
       {
         id: 100,
@@ -424,7 +424,7 @@ describe("session-lifetime restore (SW restarts)", () => {
   });
 
   it("worker restarting twice in the same session does not re-run URL restoration", () => {
-    // storage.session survives SW restarts; in-memory does not.
+    // storage.session survives SW restarts; in memory does not.
     const sessionState = { restoreCompleted: false };
     const preRestoreStored = {
       "1": {

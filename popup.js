@@ -1,11 +1,11 @@
-// Pure helpers live in lib/core.js (unit-tested). Loaded before this file.
+// Pure helpers live in lib/core.js (unit tested). Loaded before this file.
 const Core = globalThis.xNxPCore;
 
 /**
  * Load open tabs for the popup UI via the background script.
- * Background waits for init, runs session-aware restore if needed, syncs,
+ * Background waits for init, runs session aware restore if needed, syncs,
  * saves, and returns records. Popup never merges raw storage itself (avoids
- * showing pre-restore IDs after a browser restart).
+ * showing pre restore IDs after a browser restart).
  */
 async function loadTabsFromBackground() {
   const started = Date.now();
@@ -63,18 +63,18 @@ document.addEventListener("DOMContentLoaded", function () {
   let cachedShortcutLabel = null;
 
   const KOFI_URL = "https://ko-fi.com/gl00ten";
-  // Mascot tips on these popup-open counts (1-based)
+  // Mascot tips on these popup open counts (1 based)
   const SPEECH_BUBBLE_OPENS = new Set([2, 6, 14]);
   const SPEECH_MESSAGES = {
-    2: "Psst — try the ☰ menu on the right. This extension does more stuff!",
+    2: "Psst, try the ☰ menu on the right. This extension does more stuff!",
     6: "Hey! The ☰ menu has unload tools, duplicates, and more. Give it a peek!",
-    14: "Still exploring? ☰ on the right is packed — unload, clean dupes, and more!",
+    14: "Still exploring? ☰ on the right is packed, unload, clean dupes, and more!",
   };
-  /** Rare Ko-fi nudge after the Best counter has hit this many tabs. */
+  /** Rare Kofi nudge after the Best counter has hit this many tabs. */
   const KOFI_TIP_MIN_BEST = 100;
   const KOFI_TIP_CHANCE = 0.02;
   const KOFI_TIP_MESSAGE =
-    "Loving the chaos? Tip me a coffee on Ko-fi — link’s in the ••• menu ☕";
+    "Loving the chaos? Tip me a coffee on Kofi, link’s in the ••• menu ☕";
 
   function defaultShortcutLabel() {
     const isMac =
@@ -151,7 +151,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (SPEECH_BUBBLE_OPENS.has(next)) {
         msg =
           SPEECH_MESSAGES[next] ||
-          "Psst — try the ☰ menu on the right. This extension does more stuff!";
+          "Psst, try the ☰ menu on the right. This extension does more stuff!";
       } else {
         const best = stored.personalBest || personalBest || 0;
         if (best >= KOFI_TIP_MIN_BEST && Math.random() < KOFI_TIP_CHANCE) {
@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", function () {
     memBar.hidden = !show;
   }
 
-  /** Tab load counts (Firefox does not expose process RAM to add-ons). */
+  /** Tab load counts (Firefox does not expose process RAM to add ons). */
   async function refreshMemBar(extra = null) {
     if (!memStatsEl) return;
     setMemBarVisible(true);
@@ -349,14 +349,14 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function closeDuplicateTabs() {
-    // Re-analyze so the list is fresh (tabs may have changed)
+    // Reanalyze so the list is fresh (tabs may have changed)
     const analysis = await analyzeDuplicates();
     lastDupesAnalysis = analysis;
     if (!analysis.toCloseIds.length) {
       return { closed: 0 };
     }
 
-    // One-by-one so we only count tabs the browser actually closed
+    // One by one so we only count tabs the browser actually closed
     let closed = 0;
     for (const id of analysis.toCloseIds) {
       try {
@@ -619,7 +619,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Hidden entry: four rapid clicks on the logo (left icon + title) toggles debug.
-  // Manual counter — e.detail is unreliable for 4+ clicks in some browsers.
+  // Manual counter, e.detail is unreliable for 4+ clicks in some browsers.
   const brandEl = document.querySelector(".brand");
   if (brandEl) {
     let brandClicks = 0;
@@ -653,7 +653,7 @@ document.addEventListener("DOMContentLoaded", function () {
           enabled: debugMode,
         });
         await browser.storage.local.set({ debugMode });
-        setDebugStatus(debugMode ? "Debug on — leave on while reproducing issues" : "Debug off");
+        setDebugStatus(debugMode ? "Debug on, leave on while reproducing issues" : "Debug off");
       } catch (err) {
         setDebugStatus("Failed to set debug: " + err);
       }
@@ -708,7 +708,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (debugStatus) debugStatus.textContent = text || "";
   }
 
-  // Restore previous search + sort state (audio filter is session-only)
+  // Restore previous search + sort state (audio filter is session only)
   (async () => {
     try {
       const result = await browser.storage.local.get([
@@ -818,7 +818,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
     applyRowHighlight();
-    // Chunked paint may not have this row yet — retry next frame
+    // Chunked paint may not have this row yet, retry next frame
     if (!tableBody.children[highlightIndex]) {
       requestAnimationFrame(applyRowHighlight);
     }
@@ -881,7 +881,7 @@ document.addEventListener("DOMContentLoaded", function () {
     header.addEventListener("click", handleTableHeaderClick);
   });
 
-  // Cancel in-flight chunked renders when filters/sort change
+  // Cancel in flight chunked renders when filters/sort change
   let renderGeneration = 0;
   const RENDER_CHUNK_SIZE = 60;
 
@@ -968,7 +968,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const titleDiv = document.createElement("div");
     titleDiv.classList.add("tab-title");
 
-    // Skip favicons for unloaded tabs — fewer image loads when most tabs are sleeping
+    // Skip favicons for unloaded tabs, fewer image loads when most tabs are sleeping
     if (tabInfo.favIconUrl && !tabInfo.discarded) {
       const favicon = document.createElement("img");
       favicon.classList.add("tab-favicon");
@@ -990,7 +990,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const sleepIcon = document.createElement("span");
       sleepIcon.classList.add("discarded-indicator");
       sleepIcon.textContent = "💤";
-      sleepIcon.title = "Unloaded — reloads when you open it";
+      sleepIcon.title = "Unloaded, reloads when you open it";
       titleDiv.appendChild(sleepIcon);
     }
 
@@ -1012,7 +1012,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function switchToTab(tabInfo) {
     try {
-      // Re-fetch so windowId is correct after the tab was moved across windows
+      // Refetch so windowId is correct after the tab was moved across windows
       const tab = await browser.tabs.get(tabInfo.id);
       await browser.tabs.update(tab.id, { active: true });
       await browser.windows.update(tab.windowId, { focused: true });
@@ -1303,7 +1303,7 @@ document.addEventListener("DOMContentLoaded", function () {
       bestContainer.style.transform = "scale(1)";
     }, 220);
 
-    // Big sessions only — fireworks for records above 100 tabs
+    // Big sessions only, fireworks for records above 100 tabs
     if (newBest > 100) {
       launchFireworks();
     }
