@@ -1,4 +1,5 @@
-// Firefox MV2: polyfill + core loaded via manifest background.scripts
+// Firefox MV3: polyfill + core loaded via manifest background.scripts
+// (Firefox uses event-page scripts; Chrome uses service_worker + importScripts.)
 const Core = globalThis.xNxPCore;
 
 // Session restore (cleared when the browser quits).
@@ -425,7 +426,7 @@ async function handleGetDebugReport() {
       storageKeys,
       logs: debugLogs.slice(),
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-      manifestVersion: 2,
+      manifestVersion: 3,
       sessionRestoreCompleted,
       restoreStartedAt,
       hasSessionStorage: hasSessionStorage(),

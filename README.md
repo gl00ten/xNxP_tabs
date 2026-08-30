@@ -36,7 +36,7 @@ Customize the shortcut:
 
 ## Notes
 
-- **`firefox_extension`**: Firefox Manifest V2 (AMO).
+- **`firefox_extension`**: Firefox Manifest V3 (AMO). Background uses `scripts` (Firefox event page); Chrome uses a service worker.
 - **`main`**: Chrome Manifest V3.
 - Uses `webextension-polyfill` for `browser.*` APIs.
 - Large design sources (`ori_icon*.png`) are gitignored.
