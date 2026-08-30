@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Regenerate shipped toolbar/store icons from the design source.
+# Not part of the extension package (see .webextignore / pack-extension.sh).
 #
 # Usage (from repo root):
-#   ./scripts/generate-icons.sh
-#   ./scripts/generate-icons.sh path/to/other-source.png
+#   ./tools/generate-icons.sh
+#   ./tools/generate-icons.sh path/to/other-source.png
 #
-# Default source: icons/ico_simplified.png
+# Default source: tools/icon-source/ico_simplified.png
 # Writes: icons/icon{16,32,48,64,96,128}.png
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${1:-$ROOT/icons/ico_simplified.png}"
+SRC="${1:-$ROOT/tools/icon-source/ico_simplified.png}"
 OUT_DIR="$ROOT/icons"
 SIZES=(16 32 48 64 96 128)
 
@@ -25,12 +26,12 @@ if [[ ! -f "$SRC" ]]; then
   exit 1
 fi
 
+mkdir -p "$OUT_DIR"
 echo "Source: $SRC"
 for s in "${SIZES[@]}"; do
   dest="$OUT_DIR/icon${s}.png"
-  # Lanczos resize; strip junk metadata to keep package small
   magick "$SRC" -resize "${s}x${s}" -strip "$dest"
   echo "  wrote $dest"
 done
 
-echo "Done. Manifest should reference icons/icon{16,32,48,64,96,128}.png"
+echo "Done."

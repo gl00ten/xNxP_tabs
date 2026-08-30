@@ -12,10 +12,12 @@ web-ext-artifacts/
 dist/
 build/
 
-# Large source / design assets (we only ship the optimized icons/)
+# Design sources live under tools/ (not shipped); keep them local-only if huge
+tools/icon-source/*.png
+tools/icon-source/*.psd
+tools/icon-source/*.ai
 icons/ori_icon*.png
-icons/ico_ori.png
-icons/ico_simplified.png
+icons/ico_*.png
 icons/*.psd
 icons/*.ai
 icons/*.fig

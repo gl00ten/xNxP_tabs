@@ -47,4 +47,12 @@ Customize the shortcut:
 ```bash
 npm test
 # or: node --test test/core.test.js
+
+# Regenerate toolbar icons from tools/icon-source/ico_simplified.png
+./tools/generate-icons.sh
+
+# Store zip (runtime files only — no tools/, test/, or source PNGs)
+./tools/pack-extension.sh   # → dist/xnxp-tabs.zip
 ```
+
+`tools/` and `test/` are for development only. They are excluded from store packages via `.webextignore` and `tools/pack-extension.sh`.
