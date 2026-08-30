@@ -1,0 +1,23 @@
+# Files excluded from `web-ext build` / AMO packages.
+# Keep this list aligned with tools/pack-extension.sh.
+
+tools/
+test/
+dist/
+build/
+web-ext-artifacts/
+.git/
+.gitignore
+.webextignore
+*.md
+package.json
+scripts/
+icons/test1/
+icons/ico_*.png
+icons/ori_icon*.png
+*.xpi
+*.zip
+*.crx
+.DS_Store
+.env
+.env.local
