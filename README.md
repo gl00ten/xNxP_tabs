@@ -51,8 +51,13 @@ npm test
 # Regenerate toolbar icons from tools/icon-source/ico_simplified.png
 ./tools/generate-icons.sh
 
-# Store zip (runtime files only — no tools/, test/, or source PNGs)
-./tools/pack-extension.sh   # → dist/xnxp-tabs.zip
+# Store zip for the current checkout (runtime files only)
+./tools/pack-extension.sh
+
+# Both store zips from the two branches (does not change your current branch)
+./tools/pack-both-stores.sh
+# → dist/xnxp-tabs-firefox-<ver>.zip  (AMO)
+# → dist/xnxp-tabs-chrome-<ver>.zip   (Chrome Web Store)
 ```
 
 `tools/` and `test/` are for development only. They are excluded from store packages via `.webextignore` and `tools/pack-extension.sh`.
