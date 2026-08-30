@@ -526,7 +526,20 @@ tbody tr:last-child td {
 
 /* Fixed columns + flexible last column (rest of width) */
 .col-actions {
-  width: 104px;
+  width: 58px;
+}
+
+th.col-actions {
+  font-size: 9px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+td.col-actions {
+  padding-left: 2px;
+  padding-right: 2px;
+  vertical-align: middle;
+  text-align: center;
 }
 
 /* Two line date/time, narrower than single line "YY.MM.DD HH:mm" */
@@ -625,18 +638,21 @@ th.col-date {
 /* ---------- Buttons ---------- */
 
 .action-button {
-  display: inline-block;
-  width: auto;
-  min-width: 44px;
-  margin: 1px 0;
-  padding: 5px 7px;
+  display: block;
+  box-sizing: border-box;
+  width: 52px;
+  height: 24px;
+  margin: 2px auto;
+  padding: 0;
   border: none;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--grad-switch);
   color: white;
   cursor: pointer;
   font-size: 10px;
   font-weight: 850;
+  line-height: 24px;
+  text-align: center;
   box-shadow: 0 2px 5px rgba(10, 80, 180, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
   transition: transform 0.14s ease, box-shadow 0.14s ease;
 }

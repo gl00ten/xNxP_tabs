@@ -896,9 +896,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Actions cell
     const actionsCell = document.createElement("td");
+    actionsCell.classList.add("col-actions");
 
     const switchButton = document.createElement("button");
-    switchButton.textContent = "↗ Switch";
+    switchButton.type = "button";
+    switchButton.textContent = "↗";
+    switchButton.title = "Switch to tab";
+    switchButton.setAttribute("aria-label", "Switch to tab");
     switchButton.classList.add("action-button");
     switchButton.onclick = (e) => {
       e.stopPropagation();
@@ -907,7 +911,10 @@ document.addEventListener("DOMContentLoaded", function () {
     actionsCell.appendChild(switchButton);
 
     const closeButton = document.createElement("button");
-    closeButton.textContent = "✕ Close";
+    closeButton.type = "button";
+    closeButton.textContent = "✕";
+    closeButton.title = "Close tab";
+    closeButton.setAttribute("aria-label", "Close tab");
     closeButton.classList.add("action-button");
     closeButton.onclick = async (e) => {
       e.stopPropagation();
