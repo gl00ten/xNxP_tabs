@@ -220,7 +220,8 @@ async function doSync(options) {
 
   if (mode === "restore") {
     await beginRestoreWindow();
-    const done = await maybeFinishRestore(!!options.forceCompleteRestore);
+    // Completes when pending is empty or restore grace has elapsed.
+    const done = await maybeFinishRestore(false);
     if (!done) {
       if (options.flush) await saveNow();
       else scheduleSave();
