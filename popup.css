@@ -121,7 +121,6 @@ body {
   height: 40px;
   border: 2px solid rgba(255, 255, 255, 0.76);
   border-radius: 10px;
-  box-shadow: 0 3px 9px rgba(8, 43, 91, 0.3), 0 0 0 2px rgba(255, 174, 48, 0.25);
   transform: rotate(-2deg);
   flex-shrink: 0;
 }
