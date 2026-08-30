@@ -14,11 +14,14 @@ build/
 
 # Large source / design assets (we only ship the optimized icons/)
 icons/ori_icon*.png
+icons/ico_ori.png
+icons/ico_simplified.png
 icons/*.psd
 icons/*.ai
 icons/*.fig
 icons/*.sketch
 icons/*-source.*
+icons/test1/
 
 # IDE / tooling
 .idea/
