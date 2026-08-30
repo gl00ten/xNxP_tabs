@@ -542,9 +542,9 @@ td.col-actions {
   text-align: center;
 }
 
-/* Two line date/time: "Wed YY.MM.DD" + "HH:mm" */
+/* Two line date/time: "Wed 30 Aug" (+ year if needed) + "HH:mm" */
 .col-date {
-  width: 78px;
+  width: 86px;
   color: #183c5f;
   font-size: 10px;
   font-weight: 600;

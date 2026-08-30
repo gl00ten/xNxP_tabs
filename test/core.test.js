@@ -820,11 +820,21 @@ describe("formatWindowLabel", () => {
 });
 
 describe("formatDateParts", () => {
-  it("splits weekday, date, and time", () => {
+  it("uses weekday and month name for the current year", () => {
     // 2020-01-15 was a Wednesday
-    const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime());
-    assert.equal(parts.date, "Wed 20.01.15");
+    const parts = core.formatDateParts(new Date(2020, 0, 15, 10, 5).getTime(), "", {
+      nowMs: new Date(2020, 5, 1).getTime(),
+    });
+    assert.equal(parts.date, "Wed 15 Jan");
     assert.equal(parts.time, "10:05");
+  });
+
+  it("appends a short year when the date is from another year", () => {
+    const parts = core.formatDateParts(new Date(2019, 7, 30, 9, 0).getTime(), "", {
+      nowMs: new Date(2020, 5, 1).getTime(),
+    });
+    assert.equal(parts.date, "Fri 30 Aug 19");
+    assert.equal(parts.time, "09:00");
   });
 });
 
